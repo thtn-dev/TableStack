@@ -8,6 +8,11 @@ import { useDBStore } from "@/store";
 import { Button } from "@/components/ui/button";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Add01Icon, DatabaseIcon } from "@hugeicons/core-free-icons";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 
 // ---------------------------------------------------------------------------
 // Main content area logic
@@ -32,10 +37,39 @@ function MainContent({ onNewConnection }: { onNewConnection: () => void }) {
             fill="none"
             className="relative opacity-20 text-primary"
           >
-            <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
-            <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" strokeWidth="1.5" />
-            <line x1="3" y1="15" x2="21" y2="15" stroke="currentColor" strokeWidth="1.5" />
-            <line x1="9" y1="9" x2="9" y2="21" stroke="currentColor" strokeWidth="1.5" />
+            <rect
+              x="3"
+              y="3"
+              width="18"
+              height="18"
+              rx="2"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+            <line
+              x1="3"
+              y1="9"
+              x2="21"
+              y2="9"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+            <line
+              x1="3"
+              y1="15"
+              x2="21"
+              y2="15"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+            <line
+              x1="9"
+              y1="9"
+              x2="9"
+              y2="21"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
           </svg>
         </div>
         <div className="flex flex-col items-center gap-2 text-center max-w-sm">
@@ -43,7 +77,8 @@ function MainContent({ onNewConnection }: { onNewConnection: () => void }) {
             Welcome to TableStack
           </p>
           <p className="text-sm text-muted-foreground/60 leading-relaxed">
-            Connect to a PostgreSQL database from the sidebar or create a new connection profile to get started.
+            Connect to a PostgreSQL database from the sidebar or create a new
+            connection profile to get started.
           </p>
           {profiles.length === 0 && (
             <Button
@@ -62,15 +97,19 @@ function MainContent({ onNewConnection }: { onNewConnection: () => void }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-muted/10 animate-in fade-in slide-in-from-right-4 duration-500">
-      {/* Upper part: Query Editor */}
-      <div className="h-[280px] min-h-[100px] shrink-0 border-b border-border/40">
-        <QueryEditor />
-      </div>
+      <ResizablePanelGroup orientation="vertical">
+        {/* Upper part: Query Editor */}
+        <ResizablePanel defaultSize={35} minSize={10} className="bg-background">
+          <QueryEditor />
+        </ResizablePanel>
 
-      {/* Bottom part: Result Panel */}
-      <div className="flex-1 min-h-0 bg-background overflow-hidden">
-        <ResultPanel />
-      </div>
+        <ResizableHandle withHandle className="bg-border/60" />
+
+        {/* Bottom part: Result Panel */}
+        <ResizablePanel defaultSize={65} minSize={10} className="bg-background">
+          <ResultPanel />
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
@@ -85,16 +124,15 @@ function App() {
   const activeProfileId = useDBStore((s) => s.activeProfileId);
   const profiles = useDBStore((s) => s.profiles.data);
   // Derive primitives — never subscribe to the Set object itself (new reference every immer update)
-  const isActiveProfileConnected = useDBStore(
-    (s) => Boolean(s.activeProfileId && s.activeConnections.has(s.activeProfileId))
+  const isActiveProfileConnected = useDBStore((s) =>
+    Boolean(s.activeProfileId && s.activeConnections.has(s.activeProfileId)),
   );
 
   const [rootDialogOpen, setRootDialogOpen] = useState(false);
 
   const activeProfile = profiles?.find((p) => p.id === activeProfileId) ?? null;
-  const connectionStatus: "connected" | "disconnected" = isActiveProfileConnected
-    ? "connected"
-    : "disconnected";
+  const connectionStatus: "connected" | "disconnected" =
+    isActiveProfileConnected ? "connected" : "disconnected";
 
   useEffect(() => {
     loadProfiles();

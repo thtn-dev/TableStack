@@ -96,7 +96,6 @@ func (a *App) ActiveConnections() []string {
 
 // ListDatabases trả về tất cả databases (cần connect trước)
 func (a *App) ListDatabases(profileID string) ([]db.DatabaseInfo, error) {
-	runtime.LogInfo(a.ctx, "ListDatabases")
 	return a.manager.ListDatabases(profileID)
 }
 
