@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 
-import { TestConnection } from "../../../wailsjs/go/main/App";
+import { TestConnection } from "@wailsjs/go/main/App";
 import { useDBStore } from "@/store";
 import type { Profile } from "@/store";
 import { cn } from "@/lib/utils";

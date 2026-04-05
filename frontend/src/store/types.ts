@@ -4,13 +4,13 @@
 // =============================================================================
 
 // Re-exported from wailsjs for convenience — use these everywhere in the app.
-export type { store, db } from "../../wailsjs/go/models";
+export type { store, db } from "@wailsjs/go/models";
 
 // ---------------------------------------------------------------------------
 // Convenience plain-object aliases (avoids `new store.Profile()` noise)
 // ---------------------------------------------------------------------------
 
-import type { store, db } from "../../wailsjs/go/models";
+import type { store, db } from "@wailsjs/go/models";
 
 /** A connection profile as stored on disk (password masked after load). */
 export type Profile = store.Profile;
@@ -54,8 +54,8 @@ export function toTableCacheKey(ref: TableRef): TableCacheKey {
 /** Per-connection schema tree state. */
 export interface SchemaNode {
   profileId: string;
-  databases: string[];        // ListDatabases result flattened to names
-  schemas: string[];          // ListSchemas result
+  databases: string[]; // ListDatabases result flattened to names
+  schemas: string[]; // ListSchemas result
   /** schema → tables */
   tablesBySchema: Record<string, TableInfo[]>;
 }
@@ -81,6 +81,9 @@ export function asyncSuccess<T>(data: T): AsyncState<T> {
   return { status: "success", data, error: null };
 }
 
-export function asyncError<T>(error: string, previous?: T | null): AsyncState<T> {
+export function asyncError<T>(
+  error: string,
+  previous?: T | null,
+): AsyncState<T> {
   return { status: "error", data: previous ?? null, error };
 }

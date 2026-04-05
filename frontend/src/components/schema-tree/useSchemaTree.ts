@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 // =============================================================================
 // Tree expand/collapse state — local only, not persisted to Zustand.
@@ -21,9 +21,16 @@ export function useSchemaTree(
     () => new Set(defaultExpanded)
   );
 
+  // Keep a ref to the current Set so callbacks below never go stale.
+  // This avoids adding `expanded` to deps, which would create new function
+  // references on every toggle and cascade re-renders through the whole tree.
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
+
+  // Stable reference — reads from ref, not closure over `expanded`.
   const isExpanded = useCallback(
-    (key: NodeKey) => expanded.has(key),
-    [expanded]
+    (key: NodeKey) => expandedRef.current.has(key),
+    [] // stable forever
   );
 
   const toggle = useCallback((key: NodeKey) => {

@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"table_stack/internal/db"
 	"table_stack/internal/store"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App là struct chính expose ra Wails
@@ -27,7 +28,7 @@ func (a *App) startup(ctx context.Context) {
 	a.profiles, err = store.NewProfileStore("dbclient") // tên app
 	if err != nil {
 		// Không thể panic trong startup — log ra stderr
-		fmt.Printf("ERROR: init profile store: %v\n", err)
+		runtime.LogErrorf(ctx, "init profile store: %v\n", err)
 	}
 }
 
@@ -95,6 +96,7 @@ func (a *App) ActiveConnections() []string {
 
 // ListDatabases trả về tất cả databases (cần connect trước)
 func (a *App) ListDatabases(profileID string) ([]db.DatabaseInfo, error) {
+	runtime.LogInfo(a.ctx, "ListDatabases")
 	return a.manager.ListDatabases(profileID)
 }
 

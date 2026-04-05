@@ -19,7 +19,7 @@ import {
   DescribeTable,
   ListIndexes,
   ExecuteQuery,
-} from "../../wailsjs/go/main/App";
+} from "@wailsjs/go/main/App";
 
 import type {
   Profile,

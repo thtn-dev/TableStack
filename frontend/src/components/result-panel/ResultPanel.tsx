@@ -98,10 +98,64 @@ export function ResultPanel() {
     );
   }
 
-  // Key by a stable fingerprint of the result so VirtualTable remounts fresh
-  // on every new query — prevents stale virtualizer scroll state from carrying over.
-  const tableKey = `${data.columns?.length ?? 0}-${data.duration}`;
-  return <VirtualTable key={tableKey} result={data} />;
+  // Columns present but zero rows — empty table.
+  // Do NOT mount VirtualTable with 0 rows: the virtualizer enters a
+  // measure→re-render loop when the scroll container is flex-1 and
+  // there's no body content to establish height. Show a static message.
+  const rowCount = data.rows?.length ?? 0;
+  if (rowCount === 0) {
+    return (
+      <div className="flex flex-col h-full bg-background overflow-hidden">
+        {/* Show column headers so the user sees the schema */}
+        <div className="overflow-auto border-b border-border/40">
+          <table
+            className="border-separate border-spacing-0"
+            style={{ width: "max-content", minWidth: "100%" }}
+          >
+            <thead>
+              <tr>
+                <th className="w-10 px-2 py-1.5 text-[10px] font-mono text-muted-foreground/30 border-b border-r border-border/50 text-center bg-muted/60 select-none">
+                  #
+                </th>
+                {(data.columns ?? []).map((col: string, i: number) => (
+                  <th
+                    key={i}
+                    className="px-3 py-1.5 text-left text-[11px] font-semibold text-muted-foreground border-b border-r border-border/50 min-w-[120px] max-w-[320px] whitespace-nowrap select-none bg-muted/60"
+                  >
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          </table>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/30">
+            Query returned 0 rows
+          </p>
+        </div>
+        {/* Status bar */}
+        <div className="h-7 shrink-0 flex items-center justify-between px-3 border-t border-border/40 bg-muted/20 text-[10px] text-muted-foreground/70 font-medium tracking-wide select-none">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5">
+              <HugeiconsIcon icon={Layers01Icon} size={11} />
+              <b className="text-foreground/60">0</b>
+              <span className="uppercase">rows</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <HugeiconsIcon icon={Clock01Icon} size={11} />
+              <b className="text-foreground/60">
+                {data.duration?.toFixed(2) ?? "0.00"}
+              </b>
+              <span>ms</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <VirtualTable key={data.duration} result={data} />;
 }
 
 // =============================================================================

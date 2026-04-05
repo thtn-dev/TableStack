@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   DatabaseIcon,
@@ -27,7 +27,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { useDBStore, selectSchemaNode } from "@/store";
 import type { Profile, TableInfo, TableRef } from "@/store";
@@ -61,7 +65,7 @@ function Chevron({ open }: { open: boolean }) {
       size={11}
       className={cn(
         "shrink-0 text-muted-foreground/50 transition-transform duration-150",
-        open && "rotate-90"
+        open && "rotate-90",
       )}
     />
   );
@@ -117,7 +121,7 @@ function TreeRow({
         "px-2 transition-colors duration-100",
         "hover:bg-muted/70",
         isSelected && "bg-primary/10 text-primary hover:bg-primary/15",
-        className
+        className,
       )}
       style={{ paddingLeft: `${8 + depth * 14}px` }}
     >
@@ -171,9 +175,7 @@ function TableNode({
         <HugeiconsIcon
           icon={Icon}
           size={13}
-          className={cn(
-            isSelected ? "text-primary" : "text-muted-foreground"
-          )}
+          className={cn(isSelected ? "text-primary" : "text-muted-foreground")}
         />
       }
       label={table.name}
@@ -216,7 +218,11 @@ function SchemaNode({
         id={`tree-schema-${profileId}-${schema}`}
         depth={depth}
         icon={
-          <HugeiconsIcon icon={FolderIco} size={13} className="text-amber-400" />
+          <HugeiconsIcon
+            icon={FolderIco}
+            size={13}
+            className="text-amber-400"
+          />
         }
         label={schema}
         isExpandable
@@ -286,7 +292,7 @@ function ProfileMenu({
           className={cn(
             "flex h-5 w-5 items-center justify-center rounded",
             "text-muted-foreground hover:bg-muted hover:text-foreground",
-            "transition-colors"
+            "transition-colors",
           )}
         >
           <HugeiconsIcon icon={MoreHorizontalIcon} size={12} />
@@ -385,7 +391,9 @@ function ProfileNode({
 
   const isConnected = useDBStore((s) => s.activeConnections.has(profile.id));
   const isConnecting = useDBStore((s) => s.connectingIds.has(profile.id));
-  const isTreeLoading = useDBStore((s) => s.schemaTreeLoading[profile.id] ?? false);
+  const isTreeLoading = useDBStore(
+    (s) => s.schemaTreeLoading[profile.id] ?? false,
+  );
   const schemaNode = useDBStore(selectSchemaNode(profile.id));
 
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -434,10 +442,12 @@ function ProfileNode({
                 icon={DatabaseIcon}
                 size={13}
                 className={cn(
-                  isConnected ? "text-primary" : "text-muted-foreground"
+                  isConnected ? "text-primary" : "text-muted-foreground",
                 )}
               />
-              <span className="absolute -bottom-0.5 -right-0.5">{statusDot}</span>
+              <span className="absolute -bottom-0.5 -right-0.5">
+                {statusDot}
+              </span>
             </div>
           )
         }
@@ -528,10 +538,15 @@ function SchemaNodeWrapper({
   selectedTable,
   onSelectTable,
 }: SchemaNodeWrapperProps) {
-  // Auto-expand "public" schema only — no empty string in the Set
-  const { isExpanded, toggle } = useSchemaTree(
-    schema === "public" ? [`${profileId}::${schema}`] : []
+  // Stable default — useMemo prevents a new array literal on every render,
+  // which would otherwise cause useSchemaTree's useState initializer to see
+  // a different reference and trigger unnecessary work downstream.
+  const defaultExpanded = useMemo(
+    () => (schema === "public" ? [`${profileId}::${schema}`] : []),
+    [schema, profileId]
   );
+
+  const { isExpanded, toggle } = useSchemaTree(defaultExpanded);
   const key = `${profileId}::${schema}`;
 
   return (
@@ -571,13 +586,15 @@ export function SchemaTree() {
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editProfile, setEditProfile] = useState<Profile | undefined>(undefined);
+  const [editProfile, setEditProfile] = useState<Profile | undefined>(
+    undefined,
+  );
 
   // Subscribe to a serialised string of active IDs so the effect only re-runs
   // when the actual set of connected profiles changes — not on every immer update
   // (which creates a new Set reference even when contents are identical).
-  const activeConnectionsKey = useDBStore(
-    (s) => [...s.activeConnections].sort().join(",")
+  const activeConnectionsKey = useDBStore((s) =>
+    [...s.activeConnections].sort().join(","),
   );
 
   // Auto-expand newly connected profiles
@@ -586,7 +603,7 @@ export function SchemaTree() {
     activeConnectionsKey.split(",").forEach((id) => {
       if (id) expand(id);
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnectionsKey]); // `expand` is stable; intentionally omitted to avoid stale closure issues
 
   const handleNewConnection = () => {
@@ -608,7 +625,11 @@ export function SchemaTree() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0" role="tree" aria-label="Database explorer">
+    <div
+      className="flex flex-col h-full min-h-0"
+      role="tree"
+      aria-label="Database explorer"
+    >
       {/* ── Header ── */}
       <div className="flex shrink-0 items-center justify-between px-2 py-1.5 border-b border-border/60">
         <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60 px-1 select-none">

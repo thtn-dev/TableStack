@@ -29,6 +29,7 @@ func main() {
 		Bind: []any{
 			app,
 		},
+		Frameless: true,
 	})
 
 	if err != nil {
