@@ -1,0 +1,95 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"sync"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+// App struct — all exported methods become frontend bindings
+type App struct {
+	ctx    context.Context
+	mu     sync.RWMutex
+	// TODO: add your services here
+	// db     *Database
+	// config *Config
+}
+
+// NewApp creates a new App instance
+func NewApp() *App {
+	return &App{}
+}
+
+// startup is called at app startup — store ctx, init services
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+	// TODO: initialize services
+	// var err error
+	// a.db, err = NewDatabase("app.db")
+	// if err != nil {
+	//     runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+	//         Type:    runtime.ErrorDialog,
+	//         Title:   "Startup Error",
+	//         Message: err.Error(),
+	//     })
+	// }
+}
+
+// domReady is called after the frontend DOM is ready
+func (a *App) domReady(ctx context.Context) {
+	// Safe to call runtime functions here
+	// runtime.WindowCenter(ctx)
+}
+
+// beforeClose is called before the app closes.
+// Return true to cancel the close.
+func (a *App) beforeClose(ctx context.Context) bool {
+	// dialog, _ := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+	//     Type:          runtime.QuestionDialog,
+	//     Title:         "Thoát ứng dụng",
+	//     Message:       "Bạn có chắc muốn thoát?",
+	//     Buttons:       []string{"Có", "Không"},
+	//     DefaultButton: "Không",
+	// })
+	// return dialog != "Có"
+	return false
+}
+
+// shutdown is called at app termination — cleanup resources
+func (a *App) shutdown(ctx context.Context) {
+	// TODO: cleanup
+	// if a.db != nil { a.db.Close() }
+}
+
+// ── Binding methods (exposed to frontend) ──────────────────────────
+
+// GetVersion returns the app version
+func (a *App) GetVersion() string {
+	return "1.0.0"
+}
+
+// OpenFile opens a file dialog and returns the selected file content
+func (a *App) OpenFile() (string, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Chọn file",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "All Files (*.*)", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("open dialog: %w", err)
+	}
+	if path == "" {
+		return "", nil // user cancelled
+	}
+	return path, nil
+}
+
+// ShowNotification emits an event to the frontend
+func (a *App) ShowNotification(message string) {
+	runtime.EventsEmit(a.ctx, "notification", map[string]string{
+		"message": message,
+	})
+}
