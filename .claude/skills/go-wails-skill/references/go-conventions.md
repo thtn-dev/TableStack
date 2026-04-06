@@ -2,17 +2,19 @@
 
 ## Naming
 
-| Thứ | Convention | Ví dụ |
-|-----|-----------|-------|
-| Package | lowercase, no underscore | `service`, `repository` |
-| Exported type | PascalCase | `UserService`, `DataResult` |
-| Unexported | camelCase | `userService`, `fetchData` |
-| Interface | -er suffix thường dùng | `Reader`, `DataFetcher` |
-| Error var | `Err` prefix | `ErrNotFound`, `ErrTimeout` |
-| Test file | `_test.go` suffix | `app_test.go` |
-| Constant | PascalCase (exported) / camelCase (unexported) | `MaxRetries`, `defaultTimeout` |
+| Item          | Convention                                     | Example                        |
+| ------------- | ---------------------------------------------- | ------------------------------ |
+| Package       | lowercase, no underscores                      | `service`, `repository`        |
+| Exported type | PascalCase                                     | `UserService`, `DataResult`    |
+| Unexported    | camelCase                                      | `userService`, `fetchData`     |
+| Interface     | `-er` suffix is commonly used                  | `Reader`, `DataFetcher`        |
+| Error var     | `Err` prefix                                   | `ErrNotFound`, `ErrTimeout`    |
+| Test file     | `_test.go` suffix                              | `app_test.go`                  |
+| Constant      | PascalCase (exported) / camelCase (unexported) | `MaxRetries`, `defaultTimeout` |
 
-## Error handling — ALWAYS explicit
+---
+
+## Error Handling — ALWAYS Explicit
 
 ```go
 // CORRECT
@@ -25,7 +27,8 @@ if err != nil {
 result, _ := doSomething()
 ```
 
-### Sentinel errors
+### Sentinel Errors
+
 ```go
 var (
     ErrNotFound   = errors.New("not found")
@@ -38,7 +41,8 @@ if errors.Is(err, ErrNotFound) {
 }
 ```
 
-### Custom error types
+### Custom Error Types
+
 ```go
 type ValidationError struct {
     Field   string
@@ -56,20 +60,24 @@ if errors.As(err, &ve) {
 }
 ```
 
-## Structs — JSON binding
+---
+
+## Structs — JSON Binding
 
 ```go
-// Fields được export → frontend nhìn thấy
+// Exported fields → visible to frontend
 type UserData struct {
     ID        string    `json:"id"`
     Name      string    `json:"name"`
     CreatedAt time.Time `json:"createdAt"`
-    // unexported fields → hidden từ frontend, OK
+    // unexported fields → hidden from frontend, OK
     internalCache map[string]string
 }
 ```
 
-## Goroutines & concurrency
+---
+
+## Goroutines & Concurrency
 
 ```go
 // ALWAYS use context for cancellation
@@ -87,7 +95,8 @@ func (a *App) LongOperation(ctx context.Context) error {
 }
 ```
 
-### sync.Mutex cho shared state
+### sync.Mutex for Shared State
+
 ```go
 type App struct {
     ctx   context.Context
@@ -102,7 +111,9 @@ func (a *App) SetCache(key, val string) {
 }
 ```
 
-## Defer — cleanup pattern
+---
+
+## Defer — Cleanup Pattern
 
 ```go
 func processFile(path string) error {
@@ -110,14 +121,16 @@ func processFile(path string) error {
     if err != nil {
         return fmt.Errorf("open file: %w", err)
     }
-    defer f.Close()  // luôn close sau khi open thành công
+    defer f.Close()  // always close after a successful open
 
     // ... process
     return nil
 }
 ```
 
-## Interface — accept interfaces, return structs
+---
+
+## Interfaces — Accept Interfaces, Return Structs
 
 ```go
 // CORRECT — dependency injection via interface
@@ -135,7 +148,9 @@ func NewApp(storage Storage) *App {
 }
 ```
 
-## Testing conventions
+---
+
+## Testing Conventions
 
 ```go
 // Table-driven tests
@@ -164,7 +179,9 @@ func TestGetData(t *testing.T) {
 }
 ```
 
-## File paths — cross-platform
+---
+
+## File Paths — Cross-Platform
 
 ```go
 // CORRECT
@@ -174,7 +191,9 @@ path := filepath.Join("data", "users", "profile.json")
 path := "data/users/profile.json"
 ```
 
-## Package organization (Wails project)
+---
+
+## Package Organization (Wails Project)
 
 ```
 myapp/
