@@ -96,6 +96,28 @@ Results propagate back through the same chain and are cached in the Zustand stor
 | Data grid | TanStack React Table 8 |
 | UI primitives | shadcn/ui + Radix UI |
 
+### Rules (`.claude/rules/`)
+
+- `.claude/rules/go_wails_desktop_development.md`
+  - Go backend + Wails architecture conventions for TableStack.
+  - Covers `app.go` binding patterns, error handling, connection management, concurrency rules, and persistence expectations.
+- `.claude/rules/react_typescript_best_practices.md`
+  - Frontend conventions for React 19 + TypeScript + Zustand + TailwindCSS 4.
+  - Covers component structure, store patterns, Wails binding usage boundaries, async error handling, and UI/accessibility conventions.
+
+### Skills (`.claude/skills/`)
+
+- `.claude/skills/go-wails-skill/SKILL.md`
+  - Task workflow for Go + Wails work: assess, plan, execute, validate.
+  - Includes Wails-specific lifecycle/runtime patterns and implementation checklists.
+
+### How to Apply in This Repo
+
+- For Go/backend tasks, prioritize `.claude/rules/go_wails_desktop_development.md` and the `go-wails-skill` references.
+- For frontend tasks, prioritize `.claude/rules/react_typescript_best_practices.md`.
+- For cross-boundary tasks (frontend calling Go bindings), apply both rule files together.
+- Never modify generated files under `frontend/wailsjs/`.
+
 ## Notes
 
 - The app currently supports **PostgreSQL only**. The driver architecture in `internal/db/` is designed to be extended (see the pluggable driver commit), but MySQL/PostgreSQL interfaces may not be complete.

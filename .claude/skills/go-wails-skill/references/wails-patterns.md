@@ -1,10 +1,11 @@
 # Wails Patterns — Reference
 
-## Frontend binding call pattern
+## Frontend Binding Call Pattern
 
 ### Go side
+
 ```go
-// Method trên App struct → tự động expose sang frontend
+// Method on the App struct → automatically exposed to the frontend
 func (a *App) ReadFile(path string) (string, error) {
     data, err := os.ReadFile(path)
     if err != nil {
@@ -14,8 +15,9 @@ func (a *App) ReadFile(path string) (string, error) {
 }
 ```
 
-### Frontend side (TypeScript với Svelte/React/Vue)
-```typescript
+### Frontend side (TypeScript with Svelte/React/Vue)
+
+```ts
 import { ReadFile } from '../wailsjs/go/main/App'
 
 // Returns Promise<string>
@@ -30,13 +32,16 @@ async function loadFile(path: string) {
 }
 ```
 
-## Events — Go → Frontend push
+---
 
-### Go phía emit
+## Events — Go → Frontend Push
+
+### Go side (emit)
+
 ```go
 import "github.com/wailsapp/wails/v2/pkg/runtime"
 
-// Emit từ goroutine bất kỳ sau khi startup
+// Emit from any goroutine after startup
 func (a *App) startBackgroundJob() {
     go func() {
         for result := range a.resultChan {
@@ -46,8 +51,9 @@ func (a *App) startBackgroundJob() {
 }
 ```
 
-### Frontend phía listen
-```typescript
+### Frontend side (listen)
+
+```ts
 import { EventsOn, EventsOff } from '../wailsjs/runtime'
 
 // Svelte
@@ -67,12 +73,14 @@ useEffect(() => {
 }, [])
 ```
 
+---
+
 ## Dialogs
 
 ```go
 // Open file
 path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-    Title:                "Chọn file",
+    Title:                "Select file",
     DefaultDirectory:     os.Getenv("HOME"),
     DefaultFilename:      "",
     Filters: []runtime.FileFilter{
@@ -85,12 +93,12 @@ path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 
 // Open directory
 dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-    Title: "Chọn thư mục",
+    Title: "Select directory",
 })
 
 // Save file
 savePath, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-    Title:           "Lưu file",
+    Title:           "Save file",
     DefaultFilename: "output.json",
     Filters: []runtime.FileFilter{
         {DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
@@ -100,13 +108,15 @@ savePath, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 // Message dialog
 selection, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
     Type:          runtime.QuestionDialog,
-    Title:         "Xác nhận",
-    Message:       "Bạn có chắc muốn xoá?",
-    Buttons:       []string{"Có", "Không"},
-    DefaultButton: "Không",
-    CancelButton:  "Không",
+    Title:         "Confirmation",
+    Message:       "Are you sure you want to delete?",
+    Buttons:       []string{"Yes", "No"},
+    DefaultButton: "No",
+    CancelButton:  "No",
 })
 ```
+
+---
 
 ## System Tray (Wails v2)
 
@@ -125,12 +135,14 @@ systemTrayMenu.AddText("Quit", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
 err := wails.Run(&options.App{
     // ...
     SystemTray: &options.SystemTray{
-        Icon:             trayIcon,
-        Menu:             systemTray,
+        Icon:              trayIcon,
+        Menu:              systemTray,
         HideWindowOnClose: true,
     },
 })
 ```
+
+---
 
 ## Clipboard
 
@@ -142,7 +154,9 @@ runtime.ClipboardSetText(a.ctx, "text to copy")
 text, err := runtime.ClipboardGetText(a.ctx)
 ```
 
-## Window operations
+---
+
+## Window Operations
 
 ```go
 runtime.WindowShow(a.ctx)
@@ -160,7 +174,9 @@ runtime.WindowSetLightTheme(a.ctx)
 runtime.WindowSetSystemDefaultTheme(a.ctx)
 ```
 
-## Screen info
+---
+
+## Screen Info
 
 ```go
 screens, err := runtime.ScreenGetAll(a.ctx)
@@ -169,7 +185,9 @@ for _, screen := range screens {
 }
 ```
 
-## wails.json key fields
+---
+
+## wails.json Key Fields
 
 ```json
 {
@@ -184,7 +202,9 @@ for _, screen := range screens {
 }
 ```
 
-## Embed assets (main.go)
+---
+
+## Embed Assets (main.go)
 
 ```go
 import "embed"
@@ -192,13 +212,15 @@ import "embed"
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// Trong wails.Run options:
+// In wails.Run options:
 AssetServer: &assetserver.Options{
     Assets: assets,
 },
 ```
 
-## Build flags
+---
+
+## Build Flags
 
 ```bash
 # Debug build
@@ -213,6 +235,8 @@ wails build -windowsconsole=false
 # Mac universal binary (Intel + Apple Silicon)
 wails build -platform darwin/universal
 
-# Cross-compile Linux từ Mac/Windows
+# Cross-compile Linux from Mac/Windows
 wails build -platform linux/amd64
 ```
+
+---

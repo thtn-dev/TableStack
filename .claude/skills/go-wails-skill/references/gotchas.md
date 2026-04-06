@@ -9,7 +9,7 @@ func (a *App) DoHeavyWork() string {
     return "done"
 }
 
-// CORRECT — emit event khi xong
+// CORRECT — emit event when finished
 func (a *App) StartHeavyWork() {
     go func() {
         time.Sleep(10 * time.Second)
@@ -18,29 +18,33 @@ func (a *App) StartHeavyWork() {
 }
 ```
 
+---
+
 ## 2. Using ctx before startup
 
 ```go
-// WRONG — ctx là nil nếu gọi trước startup
+// WRONG — ctx is nil if called before startup
 func NewApp() *App {
     a := &App{}
     runtime.EventsEmit(a.ctx, "ready") // PANIC: nil ctx
     return a
 }
 
-// CORRECT — chỉ dùng ctx sau khi startup chạy
+// CORRECT — only use ctx after startup runs
 func (a *App) startup(ctx context.Context) {
     a.ctx = ctx
     runtime.EventsEmit(a.ctx, "ready") // OK
 }
 ```
 
-## 3. Unexported struct fields → frontend nhận nil/zero
+---
+
+## 3. Unexported struct fields → frontend receives nil/zero values
 
 ```go
-// WRONG — frontend nhận {} rỗng
+// WRONG — frontend receives empty {}
 type Result struct {
-    id   string  // unexported → không serialize
+    id   string  // unexported → not serialized
     name string
 }
 
@@ -51,19 +55,23 @@ type Result struct {
 }
 ```
 
+---
+
 ## 4. Returning pointers to frontend
 
 ```go
-// WRONG — serialization không đoán được
+// WRONG — serialization may fail or behave unexpectedly
 func (a *App) GetUser() *User { ... }
 
-// CORRECT — trả value type
+// CORRECT — return value type
 func (a *App) GetUser() (User, error) { ... }
 ```
 
-## 5. Không handle error từ frontend
+---
 
-```typescript
+## 5. Not handling errors in frontend calls
+
+```ts
 // WRONG — unhandled promise rejection
 ReadFile(path)
 
@@ -75,7 +83,9 @@ try {
 }
 ```
 
-## 6. Race condition trên shared state
+---
+
+## 6. Race conditions on shared state
 
 ```go
 // WRONG
@@ -102,7 +112,9 @@ func (a *App) Get(k string) string {
 }
 ```
 
-## 7. File paths trên Windows
+---
+
+## 7. File paths on Windows
 
 ```go
 // WRONG — breaks on Windows
@@ -112,7 +124,9 @@ path := "data/" + filename
 path := filepath.Join("data", filename)
 ```
 
-## 8. Quên cleanup trong shutdown
+---
+
+## 8. Forgetting cleanup in shutdown
 
 ```go
 // WRONG — goroutine leak, file handle leak
@@ -138,13 +152,15 @@ func (a *App) shutdown(ctx context.Context) {
 }
 ```
 
-## 9. EventsOn leak trong frontend
+---
 
-```typescript
-// WRONG — event listener không được cleanup
+## 9. EventsOn leak in frontend
+
+```ts
+// WRONG — event listener is not cleaned up
 useEffect(() => {
     EventsOn('data', handler)
-    // không return cleanup!
+    // no cleanup return!
 }, [])
 
 // CORRECT
@@ -154,20 +170,24 @@ useEffect(() => {
 }, [])
 ```
 
-## 10. Binding method không phải trên *App
+---
+
+## 10. Binding method is not on *App
 
 ```go
-// WRONG — không expose sang frontend
+// WRONG — not exposed to frontend
 func GetVersion() string { return "1.0.0" }
 
-// CORRECT — phải là method trên App struct
+// CORRECT — must be a method on the App struct
 func (a *App) GetVersion() string { return "1.0.0" }
 ```
 
-## 11. Goroutine panic không recover
+---
+
+## 11. Goroutine panic not recovered
 
 ```go
-// CORRECT — luôn recover trong long-running goroutines
+// CORRECT — always recover in long-running goroutines
 go func() {
     defer func() {
         if r := recover(); r != nil {
@@ -179,12 +199,14 @@ go func() {
 }()
 ```
 
+---
+
 ## 12. Wails dev server conflict
 
 ```bash
-# Nếu port 34115 bị conflict
+# If port 34115 is in conflict
 wails dev -port 34116
 
-# Hoặc set trong wails.json
+# Or set it in wails.json
 # "frontend:dev:serverUrl": "http://localhost:5174"
 ```
