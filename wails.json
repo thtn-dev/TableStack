@@ -1,11 +1,14 @@
 {
-  "$schema": "https://wails.io/schemas/config.v2.json",
+  "$schema": "https://v3alpha.wails.io/schemas/config.v3.json",
   "name": "table_stack",
   "outputfilename": "table_stack",
-  "frontend:install": "npm install",
-  "frontend:build": "npm run build",
-  "frontend:dev:watcher": "npm run dev",
-  "frontend:dev:serverUrl": "auto",
+  "frontend": {
+    "dir": "./frontend",
+    "install": "npm install",
+    "build": "npm run build",
+    "dev": "npm run dev",
+    "devServerUrl": "auto"
+  },
   "author": {
     "name": "thtn-dev",
     "email": "thtn.1611.dev@gmail.com"

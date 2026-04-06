@@ -2,38 +2,42 @@ package main
 
 import (
 	"context"
+	"log"
 
 	"table_stack/internal/db"
 	"table_stack/internal/store"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// App là struct chính expose ra Wails
-type App struct {
+// AppService is the primary service exposed to the frontend bindings.
+type AppService struct {
 	ctx      context.Context
 	manager  *db.Manager
 	profiles *store.ProfileStore
 }
 
-func NewApp() *App {
-	return &App{}
+func NewAppService() *AppService {
+	return &AppService{}
 }
 
-func (a *App) startup(ctx context.Context) {
+func (a *AppService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.ctx = ctx
 	a.manager = db.NewManager()
 
 	var err error
 	a.profiles, err = store.NewProfileStore("dbclient") // tên app
 	if err != nil {
-		// Không thể panic trong startup — log ra stderr
-		runtime.LogErrorf(ctx, "init profile store: %v\n", err)
+		log.Printf("init profile store: %v", err)
+		return nil
 	}
+
+	return nil
 }
 
-func (a *App) shutdown(ctx context.Context) {
+func (a *AppService) ServiceShutdown() error {
 	a.manager.CloseAll()
+	return nil
 }
 
 // =============================================================================
@@ -42,18 +46,18 @@ func (a *App) shutdown(ctx context.Context) {
 
 // SaveProfile thêm mới hoặc cập nhật profile
 // Truyền profile.ID rỗng để tạo mới, có ID để update
-func (a *App) SaveProfile(p store.Profile) (store.Profile, error) {
+func (a *AppService) SaveProfile(p store.Profile) (store.Profile, error) {
 	return a.profiles.Save(p)
 }
 
 // DeleteProfile xoá profile và disconnect nếu đang active
-func (a *App) DeleteProfile(id string) error {
+func (a *AppService) DeleteProfile(id string) error {
 	a.manager.Remove(id) // disconnect nếu có
 	return a.profiles.Delete(id)
 }
 
 // ListProfiles trả về tất cả profiles (password đã mask)
-func (a *App) ListProfiles() []store.Profile {
+func (a *AppService) ListProfiles() []store.Profile {
 	return a.profiles.GetAll()
 }
 
@@ -62,12 +66,12 @@ func (a *App) ListProfiles() []store.Profile {
 // =============================================================================
 
 // TestConnection thử kết nối mà không lưu vào active connections
-func (a *App) TestConnection(p store.Profile) db.ConnectResult {
+func (a *AppService) TestConnection(p store.Profile) db.ConnectResult {
 	return db.TestProfile(storeToDBProfile(p))
 }
 
 // Connect kết nối theo profileID đã lưu
-func (a *App) Connect(profileID string) error {
+func (a *AppService) Connect(profileID string) error {
 	p, err := a.profiles.GetByID(profileID)
 	if err != nil {
 		return err
@@ -76,17 +80,17 @@ func (a *App) Connect(profileID string) error {
 }
 
 // Disconnect đóng connection
-func (a *App) Disconnect(profileID string) {
+func (a *AppService) Disconnect(profileID string) {
 	a.manager.Remove(profileID)
 }
 
 // IsConnected kiểm tra connection còn sống không
-func (a *App) IsConnected(profileID string) bool {
+func (a *AppService) IsConnected(profileID string) bool {
 	return a.manager.IsActive(profileID)
 }
 
 // ActiveConnections trả về list profileID đang connected
-func (a *App) ActiveConnections() []string {
+func (a *AppService) ActiveConnections() []string {
 	return a.manager.ActiveIDs()
 }
 
@@ -95,32 +99,32 @@ func (a *App) ActiveConnections() []string {
 // =============================================================================
 
 // ListDatabases trả về tất cả databases (cần connect trước)
-func (a *App) ListDatabases(profileID string) ([]db.DatabaseInfo, error) {
+func (a *AppService) ListDatabases(profileID string) ([]db.DatabaseInfo, error) {
 	return a.manager.ListDatabases(profileID)
 }
 
 // ListSchemas trả về tất cả schemas trong database hiện tại
-func (a *App) ListSchemas(profileID string) ([]string, error) {
+func (a *AppService) ListSchemas(profileID string) ([]string, error) {
 	return a.manager.ListSchemas(profileID)
 }
 
 // ListTables trả về tables + views trong 1 schema
-func (a *App) ListTables(profileID, schema string) ([]db.TableInfo, error) {
+func (a *AppService) ListTables(profileID, schema string) ([]db.TableInfo, error) {
 	return a.manager.ListTables(profileID, schema)
 }
 
 // DescribeTable trả về columns của 1 table
-func (a *App) DescribeTable(profileID, schema, table string) ([]db.ColumnInfo, error) {
+func (a *AppService) DescribeTable(profileID, schema, table string) ([]db.ColumnInfo, error) {
 	return a.manager.DescribeTable(profileID, schema, table)
 }
 
 // ListIndexes trả về indexes của 1 table
-func (a *App) ListIndexes(profileID, schema, table string) ([]db.IndexInfo, error) {
+func (a *AppService) ListIndexes(profileID, schema, table string) ([]db.IndexInfo, error) {
 	return a.manager.ListIndexes(profileID, schema, table)
 }
 
 // ExecuteQuery thực thi raw SQL
-func (a *App) ExecuteQuery(profileID, sqlStr string) (*db.QueryResult, error) {
+func (a *AppService) ExecuteQuery(profileID, sqlStr string) (*db.QueryResult, error) {
 	return a.manager.ExecuteQuery(profileID, sqlStr)
 }
 

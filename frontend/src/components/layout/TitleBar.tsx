@@ -9,14 +9,8 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@/lib/utils";
 import {
-  WindowMinimise,
-  WindowMaximise,
-  WindowUnmaximise,
-  WindowIsMaximised,
-  Quit,
-  WindowToggleMaximise,
-  Environment,
-} from "@wailsjs/runtime/runtime";
+  Window,
+} from "@wailsio/runtime";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,7 +35,7 @@ function AppBrand() {
         />
       </div>
       <span className="text-[13px] font-semibold tracking-tight text-foreground/90">
-        TableStack
+        TableStack 
       </span>
     </div>
   );
@@ -137,14 +131,14 @@ export function TitleBar({ className }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
-    Environment()
-      .then((env) => {
-        setPlatform(env.platform);
-      })
-      .catch(console.error);
+    const nav = navigator as Navigator & {
+      userAgentData?: { platform?: string };
+    };
+    const uaPlatform = nav.userAgentData?.platform ?? navigator.platform;
+    setPlatform(uaPlatform.toLowerCase().includes("mac") ? "darwin" : "windows");
 
     const checkMaximized = () => {
-      WindowIsMaximised().then(setIsMaximized).catch(console.error);
+      Window.IsMaximised().then(setIsMaximized).catch(console.error);
     };
     checkMaximized();
 
@@ -154,12 +148,19 @@ export function TitleBar({ className }: TitleBarProps) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const handleMinimize = () => WindowMinimise();
-  const handleMaximizeToggle = () => {
-    WindowToggleMaximise();
-    setIsMaximized(!isMaximized);
+  const handleMinimize = () => Window.Minimise();
+  const handleMaximizeToggle = async () => {
+    const maximized = await Window.IsMaximised();
+    if (maximized) {
+      await Window.Restore();
+      setIsMaximized(false);
+      return;
+    }
+
+    await Window.Maximise();
+    setIsMaximized(true);
   };
-  const handleClose = () => Quit();
+  const handleClose = () => Window.Close();
 
   const isMac = platform === "darwin";
 

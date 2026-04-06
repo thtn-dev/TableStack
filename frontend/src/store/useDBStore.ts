@@ -19,7 +19,7 @@ import {
   DescribeTable,
   ListIndexes,
   ExecuteQuery,
-} from "@wailsjs/go/main/App";
+} from "@bindings/appservice";
 
 import type {
   Profile,
@@ -351,7 +351,9 @@ export const useDBStore = create<DBState & DBActions>()(
         try {
           const res = await ExecuteQuery(profileId, sql);
           set((s) => {
-            if (res.error) {
+            if (!res) {
+              s.queryResult = asyncError("Empty query response");
+            } else if (res.error) {
               s.queryResult = asyncError(res.error, res);
             } else {
               s.queryResult = asyncSuccess(res);

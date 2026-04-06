@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@wailsjs": path.resolve(__dirname, "./wailsjs"),
+      "@bindings": path.resolve(__dirname, "./bindings/table_stack"),
     },
   },
 });

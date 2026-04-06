@@ -1,0 +1,43 @@
+version: '3'
+
+info:
+  companyName: "TableStack"
+  productName: "TableStack"
+  productIdentifier: "dev.thtn.tablestack"
+  description: "Desktop PostgreSQL explorer"
+  copyright: "(c) 2026, thtn-dev"
+  comments: "TableStack"
+  version: "0.0.1"
+
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - build/bin
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+    watched_extension:
+      - "*.go"
+      - "*.js"
+      - "*.ts"
+      - "*.tsx"
+    git_ignore: true
+  executes:
+    - cmd: go build -buildvcs=false -gcflags=all="-l" -o build/bin/table_stack
+      type: blocking
+    - cmd: wails3 task common:dev:frontend
+      type: background
+    - cmd: wails3 task run
+      type: primary
+
+fileAssociations:
+
+other:
+  - name: TableStack
