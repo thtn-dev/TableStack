@@ -24,8 +24,7 @@
     "jsx": "react-jsx",
 
     "paths": {
-      "@/*": ["./src/*"],
-      "@wailsjs/*": ["./wailsjs/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"],
