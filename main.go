@@ -2,37 +2,72 @@ package main
 
 import (
 	"embed"
+	"log"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// Wails uses Go's `embed` package to embed the frontend files into the binary.
+// Any files in the frontend/dist folder will be embedded into the binary and
+// made available to the frontend.
+// See https://pkg.go.dev/embed for more information.
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// main function serves as the application's entry point. It initializes the application, creates a window,
+// then runs it and logs any error that might occur.
 func main() {
-	// Create an instance of the app structure
-	app := NewApp()
+	appService := &App{}
 
-	// Create application with options
-	err := wails.Run(&options.App{
-		Title:            "Table stack",
-		Width:            1024,
-		Height:           768,
-		WindowStartState: options.Maximised,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	// Create a new Wails application by providing the necessary options.
+	// Variables 'Name' and 'Description' are for application metadata.
+	// 'Assets' configures the asset server with the 'FS' variable pointing to the frontend files.
+	// 'Services' is a list of Go services. Exported methods are exposed to the frontend.
+	// 'Mac' options tailor the application when running an macOS.
+	app := application.New(application.Options{
+		Name:        "TableStack",
+		Description: "Desktop SQL explorer built with Wails",
+		Services: []application.Service{
+			application.NewService(appService),
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
-		Bind: []any{
-			app,
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
 		},
-		Frameless: true,
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
 	})
 
+	// Create a new window with the necessary options.
+	// 'Title' is the title of the window.
+	// 'Mac' options tailor the window when running on macOS.
+	// 'BackgroundColour' is the background colour of the window.
+	// 'URL' is the URL that will be loaded into the webview.
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:         "Table stack",
+		Frameless:     true,
+		StartState:    application.WindowStateMaximised,
+		MinWidth:      1024,
+		MinHeight:     768,
+		DisableResize: false,
+		Mac: application.MacWindow{
+			InvisibleTitleBarHeight: 50,
+			Backdrop:                application.MacBackdropTranslucent,
+			TitleBar:                application.MacTitleBarHiddenInset,
+		},
+		Windows: application.WindowsWindow{
+			DisableFramelessWindowDecorations: false,
+		},
+		BackgroundColour: application.NewRGB(27, 38, 54),
+		URL:              "/",
+	})
+
+	// Run the application. This blocks until the application has been exited.
+	err := app.Run()
+
+	// If an error occurred while running the application, log it and exit.
 	if err != nil {
-		println("Error:", err.Error())
+		log.Fatal(err)
 	}
 }

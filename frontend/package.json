@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build:dev": "vite build --mode development",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
@@ -23,6 +24,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.23",
     "@uiw/react-codemirror": "^4.25.9",
+    "@wailsio/runtime": "^3.0.0-alpha.79",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

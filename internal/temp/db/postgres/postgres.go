@@ -7,7 +7,7 @@ import (
 
 	_ "github.com/lib/pq"
 
-	"table_stack/internal/temp/db"
+	"github.com/thtn-dev/table_stack/internal/temp/db"
 )
 
 func init() {

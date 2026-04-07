@@ -1,37 +1,42 @@
 // =============================================================================
-// Domain Types — mirrors wailsjs/go/models.ts but as plain interfaces
+// Domain Types — mirrors generated bindings models but as plain aliases
 // so components never depend on the generated class constructors directly.
 // =============================================================================
 
-// Re-exported from wailsjs for convenience — use these everywhere in the app.
-export type { store, db } from "@wailsjs/go/models";
-
 // ---------------------------------------------------------------------------
-// Convenience plain-object aliases (avoids `new store.Profile()` noise)
+// Convenience plain-object aliases
 // ---------------------------------------------------------------------------
 
-import type { store, db } from "@wailsjs/go/models";
+import type { Profile as StoreProfile } from "../../bindings/github.com/thtn-dev/table_stack/internal/store/models";
+import type {
+  ConnectResult as DBConnectResult,
+  DatabaseInfo as DBDatabaseInfo,
+  TableInfo as DBTableInfo,
+  ColumnInfo as DBColumnInfo,
+  IndexInfo as DBIndexInfo,
+  QueryResult as DBQueryResult,
+} from "../../bindings/github.com/thtn-dev/table_stack/internal/db/models";
 
 /** A connection profile as stored on disk (password masked after load). */
-export type Profile = store.Profile;
+export type Profile = StoreProfile;
 
 /** Result of a one-shot test connection. */
-export type ConnectResult = db.ConnectResult;
+export type ConnectResult = DBConnectResult;
 
 /** A database in the server. */
-export type DatabaseInfo = db.DatabaseInfo;
+export type DatabaseInfo = DBDatabaseInfo;
 
 /** A table or view inside a schema. */
-export type TableInfo = db.TableInfo;
+export type TableInfo = DBTableInfo;
 
 /** A column descriptor. */
-export type ColumnInfo = db.ColumnInfo;
+export type ColumnInfo = DBColumnInfo;
 
 /** An index descriptor. */
-export type IndexInfo = db.IndexInfo;
+export type IndexInfo = DBIndexInfo;
 
 /** Result of a SQL query execution. */
-export type QueryResult = db.QueryResult;
+export type QueryResult = DBQueryResult;
 
 // ---------------------------------------------------------------------------
 // UI-level compound types

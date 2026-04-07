@@ -6,8 +6,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-
-	"table_stack/internal/temp/db"
+	"github.com/thtn-dev/table_stack/internal/temp/db"
 )
 
 func init() {
