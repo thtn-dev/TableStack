@@ -16,11 +16,11 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func createMainWindow(app *application.App) *application.WebviewWindow {
+func createMainWindow(app *application.App, hidden bool) *application.WebviewWindow {
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:         "Table stack",
 		Frameless:     true,
-		StartState:    application.WindowStateMaximised,
+		Hidden:        hidden,
 		MinWidth:      1024,
 		MinHeight:     768,
 		DisableResize: false,
@@ -67,19 +67,22 @@ func main() {
 		},
 	})
 
+	// Pre-create main window hidden to avoid Chrome_WidgetWin_0 unregister error
+	// (creating a new window inside WindowClosing causes Error 1412 on Windows).
+	mainWindow := createMainWindow(app, true)
+
 	startupWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "TableStack Startup",
-		Width:            420,
-		Height:           240,
+		Width:            620,
+		Height:           440,
 		DisableResize:    true,
 		AlwaysOnTop:      true,
 		BackgroundColour: application.NewRGB(20, 28, 41),
-		URL:              "/?window=startup",
+		URL:              "/#/startup",
 	})
 
 	startupWindow.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
-		mainWindow := createMainWindow(app)
-		mainWindow.Center()
+		mainWindow.Maximise()
 		mainWindow.Focus()
 	})
 

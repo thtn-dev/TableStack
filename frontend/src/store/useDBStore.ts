@@ -13,11 +13,13 @@ import {
   Connect,
   Disconnect,
   ActiveConnections,
+  GetLastActiveProfile,
   ListDatabases,
   ListSchemas,
   ListTables,
   DescribeTable,
   ListIndexes,
+  SetLastActiveProfile,
   ExecuteQuery,
 } from "../../bindings/github.com/thtn-dev/table_stack/app";
 
@@ -90,6 +92,7 @@ interface DBActions {
   connect: (profileId: string) => Promise<void>;
   disconnect: (profileId: string) => Promise<void>;
   syncActiveConnections: () => Promise<void>;
+  syncLastActiveProfile: () => Promise<void>;
 
   // ── Schema tree ──────────────────────────────────────────────────────────────
   loadSchemaTree: (profileId: string) => Promise<void>;
@@ -225,6 +228,26 @@ export const useDBStore = create<DBState & DBActions>()(
         }
       },
 
+      syncLastActiveProfile: async () => {
+        try {
+          const id = await GetLastActiveProfile();
+          if (!id) {
+            return;
+          }
+
+          if (!get().activeConnections.has(id)) {
+            return;
+          }
+
+          set((s) => {
+            s.activeProfileId = id;
+          });
+          await get().loadSchemaTree(id);
+        } catch {
+          // Non-fatal — app can still work
+        }
+      },
+
       // ── Schema tree ───────────────────────────────────────────────────────
 
       loadSchemaTree: async (profileId) => {
@@ -294,6 +317,7 @@ export const useDBStore = create<DBState & DBActions>()(
         set((s) => {
           s.activeProfileId = profileId;
         });
+        void SetLastActiveProfile(profileId ?? "");
       },
 
       // ── Column cache ──────────────────────────────────────────────────────
