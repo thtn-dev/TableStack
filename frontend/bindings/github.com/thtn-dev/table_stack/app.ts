@@ -47,6 +47,13 @@ export function ExecuteQuery(profileID: string, sqlStr: string): $CancellablePro
     });
 }
 
+/**
+ * GetLastActiveProfile returns the profile ID selected last across windows.
+ */
+export function GetLastActiveProfile(): $CancellablePromise<string> {
+    return $Call.ByID(1787524770);
+}
+
 export function IsConnected(profileID: string): $CancellablePromise<boolean> {
     return $Call.ByID(236330520, profileID);
 }
@@ -91,6 +98,13 @@ export function SaveProfile(p: store$0.Profile): $CancellablePromise<store$0.Pro
     return $Call.ByID(406053493, p).then(($result: any) => {
         return $$createType9($result);
     });
+}
+
+/**
+ * SetLastActiveProfile stores the profile that should be focused by the main window.
+ */
+export function SetLastActiveProfile(profileID: string): $CancellablePromise<void> {
+    return $Call.ByID(3037183246, profileID);
 }
 
 export function TestConnection(p: store$0.Profile): $CancellablePromise<db$0.ConnectResult> {
