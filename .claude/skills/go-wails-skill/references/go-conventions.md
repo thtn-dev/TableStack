@@ -197,10 +197,10 @@ path := "data/users/profile.json"
 
 ```
 myapp/
-  main.go          # wails.Run, wire up App
-  app.go           # App struct + startup/shutdown lifecycle
+    main.go          # application.New(...), wire up App service + window
+    app.go           # App struct + ServiceStartup/ServiceShutdown lifecycle
   models.go        # shared data structs (JSON-serializable)
   *_service.go     # domain logic (file_service.go, db_service.go)
   frontend/        # JS/TS frontend
-  build/           # wails build output
+    build/           # wails3 build assets/config
 ```

@@ -23,17 +23,18 @@ func (a *App) StartHeavyWork() {
 ## 2. Using ctx before startup
 
 ```go
-// WRONG — ctx is nil if called before startup
+// WRONG — ctx is nil if called before service startup
 func NewApp() *App {
     a := &App{}
-    runtime.EventsEmit(a.ctx, "ready") // PANIC: nil ctx
+    application.Get().Event.Emit("ready") // PANIC: nil ctx
     return a
 }
 
-// CORRECT — only use ctx after startup runs
-func (a *App) startup(ctx context.Context) {
+// CORRECT — only use ctx after ServiceStartup runs
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
     a.ctx = ctx
-    runtime.EventsEmit(a.ctx, "ready") // OK
+    application.Get().Event.Emit("ready") // OK
+    return nil
 }
 ```
 
@@ -130,25 +131,28 @@ path := filepath.Join("data", filename)
 
 ```go
 // WRONG — goroutine leak, file handle leak
-func (a *App) startup(ctx context.Context) {
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
     a.ctx = ctx
     a.db, _ = sql.Open("sqlite3", "app.db")
     go a.backgroundWorker()
+    return nil
 }
 
 // CORRECT
-func (a *App) startup(ctx context.Context) {
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
     a.ctx = ctx
     a.db, _ = sql.Open("sqlite3", "app.db")
     a.workerCancel = make(chan struct{})
     go a.backgroundWorker(a.workerCancel)
+    return nil
 }
 
-func (a *App) shutdown(ctx context.Context) {
+func (a *App) ServiceShutdown() error {
     close(a.workerCancel)
     if a.db != nil {
         a.db.Close()
     }
+    return nil
 }
 ```
 
@@ -159,14 +163,14 @@ func (a *App) shutdown(ctx context.Context) {
 ```ts
 // WRONG — event listener is not cleaned up
 useEffect(() => {
-    EventsOn('data', handler)
+    On('data', handler)
     // no cleanup return!
 }, [])
 
 // CORRECT
 useEffect(() => {
-    EventsOn('data', handler)
-    return () => EventsOff('data')
+    const unlisten = On('data', handler)
+    return unlisten
 }, [])
 ```
 
@@ -205,8 +209,10 @@ go func() {
 
 ```bash
 # If port 34115 is in conflict
-wails dev -port 34116
+wails3 dev -port 34116
 
-# Or set it in wails.json
-# "frontend:dev:serverUrl": "http://localhost:5174"
+# Or set it in build/config.yml
+# dev_mode:
+#   executes:
+#     - cmd: wails3 task common:dev:frontend
 ```

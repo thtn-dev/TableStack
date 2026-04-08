@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**TableStack** is a desktop PostgreSQL GUI client built with [Wails v2](https://wails.io/) — a framework that combines a Go backend with a React/TypeScript frontend rendered in the OS-native WebView.
+**TableStack** is a desktop PostgreSQL GUI client built with [Wails v3](https://v3.wails.io/) — a framework that combines a Go backend with a React/TypeScript frontend rendered in the OS-native WebView.
 
 ## Commands
 
@@ -12,18 +12,18 @@ All commands assume you are at the project root unless noted.
 
 ### Development
 ```bash
-wails dev          # Start app with hot reload (Go + frontend simultaneously)
+wails3 dev         # Start app with hot reload (Go + frontend simultaneously)
 ```
 
 ### Build
 ```bash
-wails build        # Compile production binary to build/bin/
+wails3 build       # Compile production binary to build/bin/
 ```
 
 ### Frontend only (inside `frontend/`)
 ```bash
 npm install        # Install dependencies
-npm run dev        # Vite dev server (used internally by `wails dev`)
+npm run dev        # Vite dev server (used internally by `wails3 dev`)
 npm run build      # Build frontend assets to frontend/dist/
 ```
 
@@ -52,11 +52,11 @@ Internal packages under `internal/`:
 
 ### Wails Bindings
 
-Wails auto-generates TypeScript bindings at `frontend/wailsjs/go/main/App.ts` by reflecting the `App` struct. **Do not edit these files manually** — they are regenerated on `wails dev`/`wails build`. Import them in frontend code as:
+Wails auto-generates TypeScript bindings at `frontend/bindings/github.com/thtn-dev/table_stack/app.ts` by reflecting the `App` struct. **Do not edit these files manually** — they are regenerated during build/binding tasks (for example `wails3 build` or `wails3 generate bindings ...`). Import them in frontend code as:
 ```ts
-import { ExecuteQuery, Connect, ListTables } from "@wailsjs/go/main/App";
+import { ExecuteQuery, Connect, ListTables } from "../../bindings/github.com/thtn-dev/table_stack/app";
 ```
-The `@wailsjs` path alias is configured in `frontend/vite.config.ts`.
+Bindings are consumed via relative imports from `frontend/src/` to `frontend/bindings/`.
 
 ### Frontend (`frontend/src/`)
 
@@ -73,7 +73,7 @@ State is managed with **Zustand** (single store in `src/store/`). Components are
 ```
 User action in UI
   → Zustand store action
-    → Wails JS binding (wailsjs/go/main/App)
+    → Wails generated binding (frontend/bindings/github.com/thtn-dev/table_stack/app.ts)
       → Go App method (app.go)
         → internal/db package
           → PostgreSQL
@@ -85,8 +85,8 @@ Results propagate back through the same chain and are cached in the Zustand stor
 
 | Layer | Stack |
 |-------|-------|
-| Desktop framework | Wails v2 |
-| Backend language | Go 1.23 |
+| Desktop framework | Wails v3 |
+| Backend language | Go 1.25 |
 | DB driver | `lib/pq` (PostgreSQL only) |
 | Frontend framework | React 19 + TypeScript 6 |
 | Build tool | Vite 8 |
@@ -116,10 +116,10 @@ Results propagate back through the same chain and are cached in the Zustand stor
 - For Go/backend tasks, prioritize `.claude/rules/go_wails_desktop_development.md` and the `go-wails-skill` references.
 - For frontend tasks, prioritize `.claude/rules/react_typescript_best_practices.md`.
 - For cross-boundary tasks (frontend calling Go bindings), apply both rule files together.
-- Never modify generated files under `frontend/wailsjs/`.
+- Never modify generated files under `frontend/bindings/`.
 
 ## Notes
 
 - The app currently supports **PostgreSQL only**. The driver architecture in `internal/db/` is designed to be extended (see the pluggable driver commit), but MySQL/PostgreSQL interfaces may not be complete.
 - Connection profiles are stored as JSON in the OS user-config directory (`os.UserConfigDir()`), not in the repo.
-- `frontend/wailsjs/` is fully auto-generated — changes there will be overwritten.
+- `frontend/bindings/` is fully auto-generated — changes there will be overwritten.

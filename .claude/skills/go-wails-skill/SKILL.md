@@ -2,7 +2,7 @@
 name: go-wails-skill
 description: >
   Go + Wails Desktop App development assistant. Auto-invoke when working on
-  .go files in a Wails project, wails.json exists, or user mentions Wails,
+    .go files in a Wails project, build/config.yml exists, or user mentions Wails,
   frontend binding, app.go, or desktop app. Covers Go conventions,
   Wails bindings, frontend-backend communication, and build patterns.
 ---
@@ -10,7 +10,7 @@ description: >
 # Go + Wails Desktop App Skill
 
 Before starting any task, read the project structure:
-- Check `wails.json` for project config
+- Check `build/config.yml` (or project config) for Wails v3 settings
 - Check `app.go` or main struct for existing bindings
 - Check `frontend/` for framework (Svelte/React/Vue)
 - Check `go.mod` for Go version and dependencies
@@ -24,7 +24,7 @@ See `references/gotchas.md` for common mistakes to avoid.
 ## Phase 1 — ASSESS
 
 Before writing code, confirm:
-1. Which Wails version? (`wails.json` → `wailsVersion` field)
+1. Which Wails version? (`go.mod` dependency and build config)
 2. Frontend framework? (check `frontend/package.json`)
 3. What is the task: new binding, new feature, bug fix, or refactor?
 4. Does this touch frontend ↔ backend boundary? If yes, plan the binding contract first.
@@ -40,7 +40,7 @@ Before writing code, confirm:
 4. Never return raw pointers or channels to frontend
 
 ### For frontend → Go calls
-1. Frontend calls via `window.go.main.App.MethodName(args)`
+1. Frontend calls generated binding functions from `frontend/bindings/github.com/<module>/<service>.ts`
 2. Args must be JSON-serializable
 3. Returns a Promise — always handle `.catch()`
 
@@ -48,7 +48,7 @@ Before writing code, confirm:
 1. Define data structs in `models.go` or domain-specific file
 2. Add methods to App struct in `app.go` (or split into `*_service.go`)
 3. Wire up in `NewApp()` if initialization needed
-4. Update frontend bindings by running `wails generate module`
+4. Update frontend bindings by running `wails3 generate bindings -clean=true -ts`
 
 ---
 
@@ -58,7 +58,7 @@ Follow all rules in `references/go-conventions.md`.
 
 Key execution rules:
 - All exported methods on App struct become frontend-callable bindings
-- Use `a.ctx` (stored from `startup`) for context-aware operations
+- Use `a.ctx` (stored from `ServiceStartup`) for context-aware operations
 - Long operations must run in goroutine + use channels or callbacks
 - File paths: always use `filepath.Join`, never string concat with `/`
 - Never block the main goroutine
@@ -73,8 +73,9 @@ func NewApp() *App {
     return &App{}
 }
 
-func (a *App) startup(ctx context.Context) {
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
     a.ctx = ctx
+    return nil
 }
 
 // CORRECT — binding method signature
@@ -92,56 +93,52 @@ func (a *App) GetData(id string) (DataResult, error) {
 ## Phase 4 — WAILS-SPECIFIC RULES
 
 ### Context & Lifecycle
-- `startup(ctx)` → store ctx, init services
-- `beforeClose(ctx) bool` → return true to cancel close
-- `shutdown(ctx)` → cleanup, close DB/files
-- `domReady(ctx)` → safe to call runtime functions
+- `ServiceStartup(ctx, options)` → store ctx, init services
+- `ServiceShutdown()` → cleanup, close DB/files
+- Use service-level hooks for lifecycle logic in Wails v3
 
 ### Runtime calls (Go → Frontend events)
 ```go
-import "github.com/wailsapp/wails/v2/pkg/runtime"
+import "github.com/wailsapp/wails/v3/pkg/application"
 
 // Emit event to frontend
-runtime.EventsEmit(a.ctx, "data-updated", payload)
+application.Get().Event.Emit("data-updated", payload)
 
 // Show dialog
-runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-    Type:    runtime.InfoDialog,
-    Title:   "Success",
-    Message: "Operation completed",
-})
+application.Get().Dialog.Info().
+    SetTitle("Success").
+    SetMessage("Operation completed").
+    Show()
 
 // Open file dialog
-filePath, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-    Title: "Select File",
-    Filters: []runtime.FileFilter{
-        {DisplayName: "Go Files", Pattern: "*.go"},
-    },
-})
+filePath, err := application.Get().Dialog.OpenFile().
+    SetTitle("Select File").
+    AddFilter("Go Files", "*.go").
+    PromptForSingleSelection()
 ```
 
 ### Window management
 ```go
-runtime.WindowSetTitle(a.ctx, "New Title")
-runtime.WindowSetSize(a.ctx, 1280, 720)
-runtime.WindowCenter(a.ctx)
-runtime.WindowMinimise(a.ctx)
+mainWindow.SetTitle("New Title")
+mainWindow.SetSize(1280, 720)
+mainWindow.Center()
+mainWindow.Minimise()
 ```
 
 ### main.go wiring — must include all lifecycle hooks
 ```go
-err := wails.Run(&options.App{
-    Title:            "My App",
-    Width:            1024,
-    Height:           768,
-    AssetServer:      &assetserver.Options{Assets: assets},
-    BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-    OnStartup:        app.startup,
-    OnDomReady:       app.domReady,
-    OnBeforeClose:    app.beforeClose,
-    OnShutdown:       app.shutdown,
-    Bind:             []interface{}{app},
+app := application.New(application.Options{
+    Name: "My App",
+    Services: []application.Service{
+        application.NewService(appService),
+    },
+    Assets: application.AssetOptions{
+        Handler: application.AssetFileServerFS(assets),
+    },
 })
+
+app.Window.NewWithOptions(application.WebviewWindowOptions{Title: "My App"})
+err := app.Run()
 ```
 
 ---
@@ -150,20 +147,20 @@ err := wails.Run(&options.App{
 
 After implementation, verify:
 
-- [ ] `wails build` succeeds (no compile errors)
-- [ ] `wails dev` hot-reload works
+- [ ] `wails3 build` succeeds (no compile errors)
+- [ ] `wails3 dev` hot-reload works
 - [ ] All new binding methods have error return value
 - [ ] No goroutine leaks (long ops use context cancellation)
-- [ ] File handles / DB connections closed in `shutdown()`
+- [ ] File handles / DB connections closed in `ServiceShutdown()`
 - [ ] Frontend handles Promise rejection for every binding call
 - [ ] Structs used as return types are JSON-serializable (no unexported fields needed by frontend)
-- [ ] Run `wails generate module` if bindings changed
+- [ ] Run `wails3 generate bindings -clean=true -ts` if bindings changed
 
 ### Common build commands
 ```bash
-wails dev                    # Dev mode with hot reload
-wails build                  # Production build
-wails build -clean           # Clean build
-wails generate module        # Regenerate frontend bindings
-wails doctor                 # Check environment setup
+wails3 dev                             # Dev mode with hot reload
+wails3 build                           # Production build
+wails3 build -clean                    # Clean build
+wails3 generate bindings -clean=true -ts  # Regenerate frontend bindings
+wails3 doctor                          # Check environment setup
 ```
