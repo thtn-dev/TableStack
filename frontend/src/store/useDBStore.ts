@@ -20,6 +20,7 @@ import {
   DescribeTable,
   ListIndexes,
   SetLastActiveProfile,
+  ShowMainWindow,
   ExecuteQuery,
 } from "../../bindings/github.com/thtn-dev/table_stack/app";
 
@@ -93,6 +94,7 @@ interface DBActions {
   disconnect: (profileId: string) => Promise<void>;
   syncActiveConnections: () => Promise<void>;
   syncLastActiveProfile: () => Promise<void>;
+  openMainWindow: () => Promise<void>;
 
   // ── Schema tree ──────────────────────────────────────────────────────────────
   loadSchemaTree: (profileId: string) => Promise<void>;
@@ -246,6 +248,10 @@ export const useDBStore = create<DBState & DBActions>()(
         } catch {
           // Non-fatal — app can still work
         }
+      },
+
+      openMainWindow: async () => {
+        await ShowMainWindow();
       },
 
       // ── Schema tree ───────────────────────────────────────────────────────

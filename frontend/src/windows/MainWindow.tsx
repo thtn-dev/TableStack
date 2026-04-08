@@ -140,23 +140,6 @@ export function MainWindow() {
 
   useEffect(() => {
     void syncFromBackend();
-
-    const handleFocus = () => {
-      void syncFromBackend();
-    };
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void syncFromBackend();
-      }
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
   }, [loadProfiles, syncActiveConnections, syncLastActiveProfile]);
 
   useEffect(() => {

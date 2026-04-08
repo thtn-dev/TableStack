@@ -107,6 +107,13 @@ export function SetLastActiveProfile(profileID: string): $CancellablePromise<voi
     return $Call.ByID(3037183246, profileID);
 }
 
+/**
+ * ShowMainWindow asks the host process to create/focus the main window.
+ */
+export function ShowMainWindow(): $CancellablePromise<void> {
+    return $Call.ByID(3189675457);
+}
+
 export function TestConnection(p: store$0.Profile): $CancellablePromise<db$0.ConnectResult> {
     return $Call.ByID(1257240193, p).then(($result: any) => {
         return $$createType13($result);
