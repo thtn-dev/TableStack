@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
@@ -14,6 +15,33 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+func createMainWindow(app *application.App) *application.WebviewWindow {
+	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:         "Table stack",
+		Frameless:     true,
+		StartState:    application.WindowStateMaximised,
+		MinWidth:      1024,
+		MinHeight:     768,
+		DisableResize: false,
+		Mac: application.MacWindow{
+			InvisibleTitleBarHeight: 50,
+			Backdrop:                application.MacBackdropTranslucent,
+			TitleBar:                application.MacTitleBarHiddenInset,
+		},
+		Windows: application.WindowsWindow{
+			DisableFramelessWindowDecorations: false,
+		},
+		BackgroundColour: application.NewRGB(27, 38, 54),
+		URL:              "/",
+	})
+
+	mainWindow.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
+		app.Quit()
+	})
+
+	return mainWindow
+}
 
 // main function serves as the application's entry point. It initializes the application, creates a window,
 // then runs it and logs any error that might occur.
@@ -35,32 +63,24 @@ func main() {
 			Handler: application.AssetFileServerFS(assets),
 		},
 		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
 	})
 
-	// Create a new window with the necessary options.
-	// 'Title' is the title of the window.
-	// 'Mac' options tailor the window when running on macOS.
-	// 'BackgroundColour' is the background colour of the window.
-	// 'URL' is the URL that will be loaded into the webview.
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:         "Table stack",
-		Frameless:     true,
-		StartState:    application.WindowStateMaximised,
-		MinWidth:      1024,
-		MinHeight:     768,
-		DisableResize: false,
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
-		},
-		Windows: application.WindowsWindow{
-			DisableFramelessWindowDecorations: false,
-		},
-		BackgroundColour: application.NewRGB(27, 38, 54),
-		URL:              "/",
+	startupWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:            "TableStack Startup",
+		Width:            420,
+		Height:           240,
+		DisableResize:    true,
+		AlwaysOnTop:      true,
+		BackgroundColour: application.NewRGB(20, 28, 41),
+		URL:              "/?window=startup",
+	})
+
+	startupWindow.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
+		mainWindow := createMainWindow(app)
+		mainWindow.Center()
+		mainWindow.Focus()
 	})
 
 	// Run the application. This blocks until the application has been exited.
