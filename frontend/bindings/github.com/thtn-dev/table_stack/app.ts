@@ -81,6 +81,12 @@ export function ListTables(profileID: string, schema: string): $CancellablePromi
     });
 }
 
+export function RegisteredDrivers(): $CancellablePromise<string[]> {
+    return $Call.ByID(3935134584).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
 export function SaveProfile(p: store$0.Profile): $CancellablePromise<store$0.Profile> {
     return $Call.ByID(406053493, p).then(($result: any) => {
         return $$createType9($result);

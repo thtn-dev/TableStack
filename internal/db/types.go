@@ -1,7 +1,5 @@
 package db
 
-// ---- Schema types — dùng chung cho mọi driver ----
-
 type DatabaseInfo struct {
 	Name string `json:"name"`
 }
@@ -9,7 +7,7 @@ type DatabaseInfo struct {
 type TableInfo struct {
 	Schema string `json:"schema"`
 	Name   string `json:"name"`
-	Type   string `json:"type"` // BASE TABLE | VIEW
+	Type   string `json:"type"`
 }
 
 type ColumnInfo struct {

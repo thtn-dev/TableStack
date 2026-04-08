@@ -46,16 +46,9 @@ export class ColumnInfo {
     }
 }
 
-/**
- * ConnectResult trả về khi test/open connection
- */
 export class ConnectResult {
     "success": boolean;
     "message": string;
-
-    /**
-     * PostgreSQL version string
-     */
     "version": string;
 
     /** Creates a new ConnectResult instance. */
@@ -136,17 +129,10 @@ export class IndexInfo {
     }
 }
 
-/**
- * QueryResult chứa kết quả của một câu query
- */
 export class QueryResult {
     "columns": string[];
     "rows": any[][];
     "affected": number;
-
-    /**
-     * ms
-     */
     "duration": number;
     "error": string;
 
@@ -191,10 +177,6 @@ export class QueryResult {
 export class TableInfo {
     "schema": string;
     "name": string;
-
-    /**
-     * BASE TABLE | VIEW
-     */
     "type": string;
 
     /** Creates a new TableInfo instance. */

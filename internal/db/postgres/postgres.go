@@ -1,46 +1,60 @@
-package db
+package postgres
 
 import (
+	"database/sql"
 	"fmt"
+	"time"
+
+	_ "github.com/lib/pq"
+
+	"github.com/thtn-dev/table_stack/internal/db"
 )
 
-// ---- Structs ----
-
-type DatabaseInfo struct {
-	Name string `json:"name"`
+func init() {
+	db.Register("postgres", &Driver{})
 }
 
-type TableInfo struct {
-	Schema string `json:"schema"`
-	Name   string `json:"name"`
-	Type   string `json:"type"` // BASE TABLE | VIEW
-}
+type Driver struct{}
 
-type ColumnInfo struct {
-	Name         string `json:"name"`
-	DataType     string `json:"dataType"`
-	IsNullable   bool   `json:"isNullable"`
-	IsPrimaryKey bool   `json:"isPrimaryKey"`
-	DefaultValue string `json:"defaultValue"`
-	Position     int    `json:"position"`
-}
-
-type IndexInfo struct {
-	Name    string   `json:"name"`
-	Columns []string `json:"columns"`
-	Unique  bool     `json:"unique"`
-}
-
-// ---- Schema methods ----
-
-// ListDatabases trả về tất cả databases mà user có quyền truy cập
-func (m *Manager) ListDatabases(connID string) ([]DatabaseInfo, error) {
-	conn, err := m.Get(connID)
-	if err != nil {
-		return nil, err
+func (d *Driver) Open(p db.Profile) (*sql.DB, error) {
+	sslMode := p.SSLMode
+	if sslMode == "" {
+		sslMode = "disable"
 	}
 
-	rows, err := conn.DB.Query(`
+	dsn := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		p.Host, p.Port, p.User, p.Password, p.Database, sslMode,
+	)
+
+	conn, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("sql.Open: %w", err)
+	}
+
+	conn.SetMaxOpenConns(10)
+	conn.SetMaxIdleConns(3)
+	conn.SetConnMaxLifetime(30 * time.Minute)
+	conn.SetConnMaxIdleTime(5 * time.Minute)
+
+	if err := conn.Ping(); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("ping failed: %w", err)
+	}
+
+	return conn, nil
+}
+
+func (d *Driver) ServerVersion(conn *sql.DB) (string, error) {
+	var version string
+	if err := conn.QueryRow("SELECT version()").Scan(&version); err != nil {
+		return "", err
+	}
+	return version, nil
+}
+
+func (d *Driver) ListDatabases(conn *sql.DB) ([]db.DatabaseInfo, error) {
+	rows, err := conn.Query(`
 		SELECT datname
 		FROM pg_database
 		WHERE datistemplate = false
@@ -52,9 +66,9 @@ func (m *Manager) ListDatabases(connID string) ([]DatabaseInfo, error) {
 	}
 	defer rows.Close()
 
-	var dbs []DatabaseInfo
+	var dbs []db.DatabaseInfo
 	for rows.Next() {
-		var d DatabaseInfo
+		var d db.DatabaseInfo
 		if err := rows.Scan(&d.Name); err != nil {
 			return nil, err
 		}
@@ -63,48 +77,8 @@ func (m *Manager) ListDatabases(connID string) ([]DatabaseInfo, error) {
 	return dbs, rows.Err()
 }
 
-// ListTables trả về tables + views trong 1 schema (mặc định "public")
-func (m *Manager) ListTables(connID, schema string) ([]TableInfo, error) {
-	conn, err := m.Get(connID)
-	if err != nil {
-		return nil, err
-	}
-
-	if schema == "" {
-		schema = "public"
-	}
-
-	rows, err := conn.DB.Query(`
-		SELECT table_schema, table_name, table_type
-		FROM information_schema.tables
-		WHERE table_schema = $1
-		  AND table_type IN ('BASE TABLE', 'VIEW')
-		ORDER BY table_type, table_name
-	`, schema)
-	if err != nil {
-		return nil, fmt.Errorf("list tables: %w", err)
-	}
-	defer rows.Close()
-
-	var tables []TableInfo
-	for rows.Next() {
-		var t TableInfo
-		if err := rows.Scan(&t.Schema, &t.Name, &t.Type); err != nil {
-			return nil, err
-		}
-		tables = append(tables, t)
-	}
-	return tables, rows.Err()
-}
-
-// ListSchemas trả về tất cả schemas trong database hiện tại
-func (m *Manager) ListSchemas(connID string) ([]string, error) {
-	conn, err := m.Get(connID)
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := conn.DB.Query(`
+func (d *Driver) ListSchemas(conn *sql.DB) ([]string, error) {
+	rows, err := conn.Query(`
 		SELECT schema_name
 		FROM information_schema.schemata
 		WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
@@ -127,14 +101,36 @@ func (m *Manager) ListSchemas(connID string) ([]string, error) {
 	return schemas, rows.Err()
 }
 
-// DescribeTable trả về columns của 1 table kèm PK info
-func (m *Manager) DescribeTable(connID, schema, table string) ([]ColumnInfo, error) {
-	conn, err := m.Get(connID)
-	if err != nil {
-		return nil, err
+func (d *Driver) ListTables(conn *sql.DB, schema string) ([]db.TableInfo, error) {
+	if schema == "" {
+		schema = "public"
 	}
 
-	rows, err := conn.DB.Query(`
+	rows, err := conn.Query(`
+		SELECT table_schema, table_name, table_type
+		FROM information_schema.tables
+		WHERE table_schema = $1
+		  AND table_type IN ('BASE TABLE', 'VIEW')
+		ORDER BY table_type, table_name
+	`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("list tables: %w", err)
+	}
+	defer rows.Close()
+
+	var tables []db.TableInfo
+	for rows.Next() {
+		var t db.TableInfo
+		if err := rows.Scan(&t.Schema, &t.Name, &t.Type); err != nil {
+			return nil, err
+		}
+		tables = append(tables, t)
+	}
+	return tables, rows.Err()
+}
+
+func (d *Driver) DescribeTable(conn *sql.DB, schema, table string) ([]db.ColumnInfo, error) {
+	rows, err := conn.Query(`
 		SELECT
 			c.column_name,
 			c.data_type,
@@ -163,9 +159,9 @@ func (m *Manager) DescribeTable(connID, schema, table string) ([]ColumnInfo, err
 	}
 	defer rows.Close()
 
-	var cols []ColumnInfo
+	var cols []db.ColumnInfo
 	for rows.Next() {
-		var c ColumnInfo
+		var c db.ColumnInfo
 		if err := rows.Scan(
 			&c.Name, &c.DataType, &c.IsNullable,
 			&c.DefaultValue, &c.Position, &c.IsPrimaryKey,
@@ -177,14 +173,8 @@ func (m *Manager) DescribeTable(connID, schema, table string) ([]ColumnInfo, err
 	return cols, rows.Err()
 }
 
-// ListIndexes trả về indexes của 1 table
-func (m *Manager) ListIndexes(connID, schema, table string) ([]IndexInfo, error) {
-	conn, err := m.Get(connID)
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := conn.DB.Query(`
+func (d *Driver) ListIndexes(conn *sql.DB, schema, table string) ([]db.IndexInfo, error) {
+	rows, err := conn.Query(`
 		SELECT
 			i.relname                        AS index_name,
 			ix.indisunique                   AS is_unique,
@@ -207,32 +197,27 @@ func (m *Manager) ListIndexes(connID, schema, table string) ([]IndexInfo, error)
 	}
 	defer rows.Close()
 
-	var indexes []IndexInfo
+	var indexes []db.IndexInfo
 	for rows.Next() {
-		var idx IndexInfo
-		// columns là array từ PostgreSQL, cần parse
+		var idx db.IndexInfo
 		var colArray string
 		if err := rows.Scan(&idx.Name, &idx.Unique, &colArray); err != nil {
 			return nil, err
 		}
-		// Parse "{col1,col2}" → []string
 		idx.Columns = parsePostgresArray(colArray)
 		indexes = append(indexes, idx)
 	}
 	return indexes, rows.Err()
 }
 
-// parsePostgresArray chuyển "{a,b,c}" → []string{"a","b","c"}
 func parsePostgresArray(s string) []string {
 	if len(s) < 2 {
 		return nil
 	}
-	// bỏ { và }
 	s = s[1 : len(s)-1]
 	if s == "" {
 		return nil
 	}
-	// split bằng dấu phẩy đơn giản (column names không có dấu phẩy)
 	var result []string
 	start := 0
 	for i := 0; i <= len(s); i++ {

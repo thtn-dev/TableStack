@@ -2,30 +2,31 @@ package db
 
 import "fmt"
 
-// Profile lưu thông tin kết nối — thêm trường Driver để chọn provider.
 type Profile struct {
 	ID       string `json:"id"`
-	Name     string `json:"name"`   // tên hiển thị, vd: "Production DB"
-	Driver   string `json:"driver"` // "postgres" | "mysql" | "sqlite" | ...
+	Name     string `json:"name"`
+	Driver   string `json:"driver"`
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	User     string `json:"user"`
-	Password string `json:"password"` // TODO: encrypt sau
+	Password string `json:"password"`
 	Database string `json:"database"`
-	SSLMode  string `json:"sslMode"` // disable | require | verify-full
+	SSLMode  string `json:"sslMode"`
 }
 
-// ConnectResult trả về khi test/open connection
 type ConnectResult struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 	Version string `json:"version"`
 }
 
-// TestProfile thử kết nối mà không lưu vào manager.
-// Tự động resolve driver từ Profile.Driver.
 func TestProfile(p Profile) ConnectResult {
-	drv, err := GetDriver(p.Driver)
+	driver := p.Driver
+	if driver == "" {
+		driver = "postgres"
+	}
+
+	drv, err := GetDriver(driver)
 	if err != nil {
 		return ConnectResult{Success: false, Message: err.Error()}
 	}

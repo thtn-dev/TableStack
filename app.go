@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/thtn-dev/table_stack/internal/db"
+	_ "github.com/thtn-dev/table_stack/internal/db/mysql"
+	_ "github.com/thtn-dev/table_stack/internal/db/postgres"
 	"github.com/thtn-dev/table_stack/internal/store"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -74,6 +76,10 @@ func (a *App) ActiveConnections() []string {
 	return a.manager.ActiveIDs()
 }
 
+func (a *App) RegisteredDrivers() []string {
+	return db.RegisteredDrivers()
+}
+
 func (a *App) ListDatabases(profileID string) ([]db.DatabaseInfo, error) {
 	return a.manager.ListDatabases(profileID)
 }
@@ -102,6 +108,7 @@ func storeToDBProfile(p store.Profile) db.Profile {
 	return db.Profile{
 		ID:       p.ID,
 		Name:     p.Name,
+		Driver:   p.Driver,
 		Host:     p.Host,
 		Port:     p.Port,
 		User:     p.User,
@@ -110,4 +117,3 @@ func storeToDBProfile(p store.Profile) db.Profile {
 		SSLMode:  p.SSLMode,
 	}
 }
-

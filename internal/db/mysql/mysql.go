@@ -6,7 +6,8 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/thtn-dev/table_stack/internal/temp/db"
+
+	"github.com/thtn-dev/table_stack/internal/db"
 )
 
 func init() {
@@ -16,7 +17,6 @@ func init() {
 type Driver struct{}
 
 func (d *Driver) Open(p db.Profile) (*sql.DB, error) {
-	// user:password@tcp(host:port)/dbname?parseTime=true
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&charset=utf8mb4",
 		p.User, p.Password, p.Host, p.Port, p.Database,
 	)
@@ -70,7 +70,6 @@ func (d *Driver) ListDatabases(conn *sql.DB) ([]db.DatabaseInfo, error) {
 }
 
 func (d *Driver) ListSchemas(conn *sql.DB) ([]string, error) {
-	// MySQL: schema ≈ database, trả về database hiện tại
 	var current string
 	if err := conn.QueryRow("SELECT DATABASE()").Scan(&current); err != nil {
 		return nil, err
@@ -165,7 +164,6 @@ func (d *Driver) ListIndexes(conn *sql.DB, schema, table string) ([]db.IndexInfo
 		if err := rows.Scan(&idx.Name, &idx.Unique, &colStr); err != nil {
 			return nil, err
 		}
-		// MySQL GROUP_CONCAT trả về "col1,col2,col3"
 		idx.Columns = splitCSV(colStr)
 		indexes = append(indexes, idx)
 	}
