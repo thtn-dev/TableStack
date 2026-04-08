@@ -18,7 +18,7 @@ func (a *App) ReadFile(path string) (string, error) {
 ### Frontend side (TypeScript with Svelte/React/Vue)
 
 ```ts
-import { ReadFile } from '../wailsjs/go/main/App'
+import { ReadFile } from '../../bindings/github.com/thtn-dev/table_stack/app'
 
 // Returns Promise<string>
 async function loadFile(path: string) {
@@ -39,13 +39,13 @@ async function loadFile(path: string) {
 ### Go side (emit)
 
 ```go
-import "github.com/wailsapp/wails/v2/pkg/runtime"
+import "github.com/wailsapp/wails/v3/pkg/application"
 
 // Emit from any goroutine after startup
 func (a *App) startBackgroundJob() {
     go func() {
         for result := range a.resultChan {
-            runtime.EventsEmit(a.ctx, "job-result", result)
+            application.Get().Event.Emit("job-result", result)
         }
     }()
 }
@@ -54,22 +54,22 @@ func (a *App) startBackgroundJob() {
 ### Frontend side (listen)
 
 ```ts
-import { EventsOn, EventsOff } from '../wailsjs/runtime'
+import { On } from '@wailsio/runtime/events'
 
 // Svelte
 onMount(() => {
-    const unlisten = EventsOn('job-result', (data) => {
-        console.log('Got result:', data)
+    const unlisten = On('job-result', (event) => {
+        console.log('Got result:', event.data)
     })
-    return () => EventsOff('job-result')
+    return unlisten
 })
 
 // React
 useEffect(() => {
-    EventsOn('job-result', (data) => {
-        setResult(data)
+    const unlisten = On('job-result', (event) => {
+        setResult(event.data)
     })
-    return () => EventsOff('job-result')
+    return unlisten
 }, [])
 ```
 
@@ -79,67 +79,53 @@ useEffect(() => {
 
 ```go
 // Open file
-path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-    Title:                "Select file",
-    DefaultDirectory:     os.Getenv("HOME"),
-    DefaultFilename:      "",
-    Filters: []runtime.FileFilter{
-        {DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
-        {DisplayName: "All Files (*.*)", Pattern: "*.*"},
-    },
-    ShowHiddenFiles:      false,
-    CanCreateDirectories: false,
-})
+path, err := application.Get().Dialog.OpenFile().
+    SetTitle("Select file").
+    SetDirectory(os.Getenv("HOME")).
+    AddFilter("JSON Files (*.json)", "*.json").
+    AddFilter("All Files (*.*)", "*.*").
+    PromptForSingleSelection()
 
 // Open directory
-dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-    Title: "Select directory",
-})
+dir, err := application.Get().Dialog.OpenFile().
+    SetTitle("Select directory").
+    CanChooseFiles(false).
+    CanChooseDirectories(true).
+    PromptForSingleSelection()
 
 // Save file
-savePath, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-    Title:           "Save file",
-    DefaultFilename: "output.json",
-    Filters: []runtime.FileFilter{
-        {DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
-    },
-})
+savePath, err := application.Get().Dialog.SaveFile().
+    SetFilename("output.json").
+    AddFilter("JSON Files (*.json)", "*.json").
+    PromptForSingleSelection()
 
 // Message dialog
-selection, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-    Type:          runtime.QuestionDialog,
-    Title:         "Confirmation",
-    Message:       "Are you sure you want to delete?",
-    Buttons:       []string{"Yes", "No"},
-    DefaultButton: "No",
-    CancelButton:  "No",
-})
+application.Get().Dialog.Question().
+    SetTitle("Confirmation").
+    SetMessage("Are you sure you want to delete?").
+    Show()
 ```
 
 ---
 
-## System Tray (Wails v2)
+## System Tray (Wails v3)
 
 ```go
 // main.go
 systemTray := menu.NewMenu()
 systemTrayMenu := systemTray.AddSubmenu("MyApp")
 systemTrayMenu.AddText("Show", keys.CmdOrCtrl("s"), func(_ *menu.CallbackData) {
-    runtime.WindowShow(app.ctx)
+    mainWindow.Show()
 })
 systemTrayMenu.AddSeparator()
 systemTrayMenu.AddText("Quit", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
-    runtime.Quit(app.ctx)
+    application.Get().Quit()
 })
 
-err := wails.Run(&options.App{
-    // ...
-    SystemTray: &options.SystemTray{
-        Icon:              trayIcon,
-        Menu:              systemTray,
-        HideWindowOnClose: true,
-    },
-})
+app := application.New(application.Options{/* ... */})
+app.SystemTray.SetMenu(systemTray)
+app.SystemTray.SetIcon(trayIcon)
+err := app.Run()
 ```
 
 ---
@@ -148,10 +134,10 @@ err := wails.Run(&options.App{
 
 ```go
 // Write
-runtime.ClipboardSetText(a.ctx, "text to copy")
+application.Get().Clipboard.SetText("text to copy")
 
 // Read
-text, err := runtime.ClipboardGetText(a.ctx)
+text, ok := application.Get().Clipboard.Text()
 ```
 
 ---
@@ -159,19 +145,14 @@ text, err := runtime.ClipboardGetText(a.ctx)
 ## Window Operations
 
 ```go
-runtime.WindowShow(a.ctx)
-runtime.WindowHide(a.ctx)
-runtime.WindowSetSize(a.ctx, 1280, 720)
-runtime.WindowSetMinSize(a.ctx, 800, 600)
-runtime.WindowCenter(a.ctx)
-runtime.WindowFullscreen(a.ctx)
-runtime.WindowUnfullscreen(a.ctx)
-runtime.WindowSetTitle(a.ctx, "New Title")
-
-// Toggle dark mode (Wails v2.8+)
-runtime.WindowSetDarkTheme(a.ctx)
-runtime.WindowSetLightTheme(a.ctx)
-runtime.WindowSetSystemDefaultTheme(a.ctx)
+mainWindow.Show()
+mainWindow.Hide()
+mainWindow.SetSize(1280, 720)
+mainWindow.SetMinSize(800, 600)
+mainWindow.Center()
+mainWindow.Fullscreen()
+mainWindow.UnFullscreen()
+mainWindow.SetTitle("New Title")
 ```
 
 ---
@@ -179,7 +160,7 @@ runtime.WindowSetSystemDefaultTheme(a.ctx)
 ## Screen Info
 
 ```go
-screens, err := runtime.ScreenGetAll(a.ctx)
+screens := application.Get().Screen.GetAll()
 for _, screen := range screens {
     fmt.Printf("Screen: %s %dx%d\n", screen.ID, screen.Size.Width, screen.Size.Height)
 }
@@ -187,19 +168,19 @@ for _, screen := range screens {
 
 ---
 
-## wails.json Key Fields
+## build/config.yml Key Fields (Wails v3)
 
-```json
-{
-  "name": "MyApp",
-  "outputfilename": "MyApp",
-  "frontend:install": "npm install",
-  "frontend:build": "npm run build",
-  "frontend:dev:watcher": "npm run dev",
-  "frontend:dev:serverUrl": "auto",
-  "wailsVersion": "v2.x.x",
-  "version": "2"
-}
+```yaml
+version: '3'
+info:
+    productName: "MyApp"
+    productIdentifier: "com.example.myapp"
+    version: "0.1.0"
+dev_mode:
+    root_path: .
+    executes:
+        - cmd: wails3 build DEV=true
+          type: blocking
 ```
 
 ---
@@ -212,9 +193,9 @@ import "embed"
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// In wails.Run options:
-AssetServer: &assetserver.Options{
-    Assets: assets,
+// In application.New(...) options:
+Assets: application.AssetOptions{
+    Handler: application.AssetFileServerFS(assets),
 },
 ```
 
@@ -224,19 +205,19 @@ AssetServer: &assetserver.Options{
 
 ```bash
 # Debug build
-wails build -debug
+wails3 build -debug
 
 # Production — minimal binary size
-wails build -trimpath -ldflags "-s -w"
+wails3 build -trimpath -ldflags "-s -w"
 
 # Windows — no console window
-wails build -windowsconsole=false
+wails3 build -windowsconsole=false
 
 # Mac universal binary (Intel + Apple Silicon)
-wails build -platform darwin/universal
+wails3 build -platform darwin/universal
 
 # Cross-compile Linux from Mac/Windows
-wails build -platform linux/amd64
+wails3 build -platform linux/amd64
 ```
 
 ---

@@ -1,4 +1,4 @@
-You are a senior Go developer working on **TableStack** — a Wails v2 desktop app for database exploration. Write idiomatic Go that follows the exact patterns already in this codebase.
+You are a senior Go developer working on **TableStack** — a Wails v3 desktop app for database exploration. Write idiomatic Go that follows the exact patterns already in this codebase.
 
 ---
 
@@ -36,8 +36,8 @@ type App struct {
 }
 ```
 
-- `startup`: never `panic` — use `runtime.LogErrorf(ctx, ...)` and continue
-- `shutdown`: must call `a.manager.CloseAll()`
+- `ServiceStartup(ctx, options) error`: initialize manager/store and return wrapped errors instead of panicking
+- `ServiceShutdown() error`: must call `a.manager.CloseAll()`
 - Every capitalized method on `*App` is exposed via IPC — return `(ResultType, error)` max
 - `store.Profile` and `db.Profile` are separate types to avoid circular imports; convert with a private `storeToDBProfile()` in `app.go`
 

@@ -1,4 +1,4 @@
-You are a senior React developer working on **TableStack** — a Wails v2 desktop app with React 19 + TypeScript + Zustand + TailwindCSS 4. Write clean, maintainable code that strictly follows the patterns already established in this codebase.
+You are a senior React developer working on **TableStack** — a Wails v3 desktop app with React 19 + TypeScript + Zustand + TailwindCSS 4. Write clean, maintainable code that strictly follows the patterns already established in this codebase.
 
 ---
 
@@ -6,7 +6,7 @@ You are a senior React developer working on **TableStack** — a Wails v2 deskto
 
 - Define explicit `interface` for component props; use `type` for unions, aliases, and inferred Zod schemas
 - Prefer `type` imports: `import type { Profile } from "@/store"`
-- Re-export Wails generated types through `src/store/types.ts` — never import directly from `@wailsjs/go/models` in components
+- Re-export Wails generated types through `src/store/types.ts` — never import directly from `../../bindings/...` in components
 - Use the `AsyncState<T>` generic for any remote data: `{ status: AsyncStatus; data: T | null; error: string | null }`
 - Use `as const` for literal arrays (e.g. `const SSL_MODES = ["disable", "require"] as const`) then derive types with `z.enum(SSL_MODES)` or `(typeof SSL_MODES)[number]`
 - Infer form types from Zod schemas: `type FormValues = z.infer<typeof schema>` — never define them manually
@@ -42,10 +42,11 @@ You are a senior React developer working on **TableStack** — a Wails v2 deskto
 
 ## Wails Bindings
 
-- Import only from `@wailsjs/go/main/App` (app methods) or `@wailsjs/runtime/runtime` (window controls)
+- Import app bindings from `../../bindings/github.com/thtn-dev/table_stack/app` in the store layer
+- If runtime APIs are needed, use the v3 runtime package (`@wailsio/runtime`) instead of legacy `@wailsjs/*` imports
 - Call Wails bindings **only inside Zustand store actions** — never directly in components
 - Errors from Wails are strings; convert with `String(err)` and store in `AsyncState.error`
-- Do not edit anything under `frontend/wailsjs/` — it is auto-generated
+- Do not edit anything under `frontend/bindings/` — it is auto-generated
 
 ---
 
@@ -130,8 +131,8 @@ You are a senior React developer working on **TableStack** — a Wails v2 deskto
 - Components: `PascalCase.tsx` inside a `kebab-case/` folder
 - Custom hooks: `useCamelCase.ts` co-located with the component, or `use-kebab-case.ts` in `src/hooks/`
 - Barrel exports via `index.ts` in each feature folder
-- Path aliases: `@/` → `src/`, `@wailsjs/` → `wailsjs/`
-- Never create new files in `frontend/wailsjs/`
+- Path aliases: `@/` → `src/`
+- Never create new files in `frontend/bindings/`
 
 ---
 
