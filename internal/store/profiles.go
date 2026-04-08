@@ -21,6 +21,7 @@ type ProfileStore struct {
 type Profile struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
+	Driver   string `json:"driver"`
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	User     string `json:"user"`

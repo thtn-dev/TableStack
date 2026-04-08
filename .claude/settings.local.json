@@ -1,3 +1,8 @@
 {
-  
+  "permissions": {
+    "allow": [
+      "Bash(go env:*)",
+      "Read(//e/Workspace/gogoap/table_stack/$\\(go env GOPATH\\)/pkg/mod/github.com/wailsapp/wails/v3@v3.0.0-alpha.74/pkg/application/**)"
+    ]
+  }
 }
