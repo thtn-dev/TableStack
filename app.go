@@ -20,6 +20,7 @@ type App struct {
 	profiles *store.ProfileStore
 	mu       sync.RWMutex
 	activeID string
+	showMain func() error
 }
 
 func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
@@ -137,6 +138,14 @@ func (a *App) ListIndexes(profileID, schema, table string) ([]db.IndexInfo, erro
 
 func (a *App) ExecuteQuery(profileID, sqlStr string) (*db.QueryResult, error) {
 	return a.manager.ExecuteQuery(profileID, sqlStr)
+}
+
+// ShowMainWindow asks the host process to create/focus the main window.
+func (a *App) ShowMainWindow() error {
+	if a.showMain == nil {
+		return fmt.Errorf("main window launcher is not configured")
+	}
+	return a.showMain()
 }
 
 func storeToDBProfile(p store.Profile) db.Profile {

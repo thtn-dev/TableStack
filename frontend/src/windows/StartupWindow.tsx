@@ -132,6 +132,7 @@ export function StartupWindow() {
   const saveProfile = useDBStore((s) => s.saveProfile);
   const connect = useDBStore((s) => s.connect);
   const setActiveProfile = useDBStore((s) => s.setActiveProfile);
+  const openMainWindow = useDBStore((s) => s.openMainWindow);
 
   const profiles = profilesData ?? [];
   const activeConnections = activeConnectionsKey
@@ -177,8 +178,16 @@ export function StartupWindow() {
     setValue("port", STARTUP_DEFAULT_PORTS[currentDriver] ?? 5432);
   }, [currentDriver, setValue]);
 
-  const handleClose = () => {
-    void Window.Close();
+  const handleClose = async () => {
+    try {
+      await openMainWindow();
+      await Window.Close();
+    } catch (err) {
+      setConnectMessage({
+        type: "error",
+        text: `Unable to open workspace window: ${String(err)}`,
+      });
+    }
   };
 
   const handleConnect = async (profile: Profile) => {
@@ -186,14 +195,14 @@ export function StartupWindow() {
 
     if (activeConnections.has(profile.id)) {
       setActiveProfile(profile.id);
-      handleClose();
+      await handleClose();
       return;
     }
 
     try {
       await connect(profile.id);
       setActiveProfile(profile.id);
-      handleClose();
+      await handleClose();
     } catch (err) {
       setConnectMessage({
         type: "error",
@@ -226,7 +235,7 @@ export function StartupWindow() {
         type: "success",
         text: "Connection profile saved and connected successfully.",
       });
-      handleClose();
+      await handleClose();
     } catch (err) {
       setFormMessage({
         type: "error",
@@ -274,7 +283,9 @@ export function StartupWindow() {
 
             <Button
               type="button"
-              onClick={handleClose}
+              onClick={() => {
+                void handleClose();
+              }}
               variant="outline"
               className="border-white/20 bg-slate-900/50 text-slate-100 hover:bg-slate-800"
             >
@@ -624,7 +635,9 @@ export function StartupWindow() {
                         type="button"
                         variant="outline"
                         className="border-white/20 bg-slate-900/50 text-slate-100 hover:bg-slate-800"
-                        onClick={handleClose}
+                        onClick={() => {
+                          void handleClose();
+                        }}
                       >
                         Later
                       </Button>
@@ -653,7 +666,9 @@ export function StartupWindow() {
               type="button"
               size="sm"
               className="h-7 gap-1.5 bg-sky-300 text-slate-950 hover:bg-sky-200"
-              onClick={handleClose}
+              onClick={() => {
+                void handleClose();
+              }}
             >
               <HugeiconsIcon icon={Login01Icon} size={13} />
               Continue
