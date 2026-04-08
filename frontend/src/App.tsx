@@ -8,11 +8,15 @@ import { useDBStore } from "@/store";
 import { Button } from "@/components/ui/button";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Add01Icon, DatabaseIcon } from "@hugeicons/core-free-icons";
+import { Window } from "@wailsio/runtime";
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
+
+const isStartupWindowMode =
+  new URLSearchParams(window.location.search).get("window") === "startup";
 
 // ---------------------------------------------------------------------------
 // Main content area logic
@@ -118,7 +122,49 @@ function MainContent({ onNewConnection }: { onNewConnection: () => void }) {
 // App root
 // ---------------------------------------------------------------------------
 
-function App() {
+function StartupWindow() {
+  const handleClose = () => {
+    void Window.Close();
+  };
+
+  return (
+    <div className="h-screen w-screen overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-sky-900 text-slate-100">
+      <main className="relative flex h-full w-full items-center justify-center p-6">
+        <div className="pointer-events-none absolute -top-20 -left-16 size-52 rounded-full bg-sky-300/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 -right-16 size-60 rounded-full bg-cyan-200/15 blur-3xl" />
+
+        <section className="relative w-full max-w-sm rounded-2xl border border-white/15 bg-slate-950/45 p-6 shadow-2xl backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-sky-500/20 text-sky-200 ring-1 ring-sky-300/30">
+              <HugeiconsIcon icon={DatabaseIcon} size={18} />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight">TableStack</h1>
+              <p className="text-xs text-slate-300/80">Startup Window</p>
+            </div>
+          </div>
+
+          <p className="mt-4 text-sm leading-relaxed text-slate-200/90">
+            Close this window to continue and open your main workspace.
+          </p>
+
+          <div className="mt-5 flex items-center justify-end">
+            <Button
+              type="button"
+              onClick={handleClose}
+              className="gap-2 bg-sky-500 text-slate-950 hover:bg-sky-400"
+            >
+              <HugeiconsIcon icon={Add01Icon} size={14} className="rotate-45" />
+              Close Startup
+            </Button>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function MainApp() {
   const loadProfiles = useDBStore((s) => s.loadProfiles);
   const syncActiveConnections = useDBStore((s) => s.syncActiveConnections);
   const activeProfileId = useDBStore((s) => s.activeProfileId);
@@ -155,6 +201,14 @@ function App() {
       />
     </>
   );
+}
+
+function App() {
+  if (isStartupWindowMode) {
+    return <StartupWindow />;
+  }
+
+  return <MainApp />;
 }
 
 export default App;
