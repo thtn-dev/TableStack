@@ -11,6 +11,7 @@ import { Create as $Create } from "@wailsio/runtime";
 export class Profile {
     "id": string;
     "name": string;
+    "driver": string;
     "host": string;
     "port": number;
     "user": string;
@@ -25,6 +26,9 @@ export class Profile {
         }
         if (!("name" in $$source)) {
             this["name"] = "";
+        }
+        if (!("driver" in $$source)) {
+            this["driver"] = "";
         }
         if (!("host" in $$source)) {
             this["host"] = "";
