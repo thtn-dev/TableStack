@@ -8,15 +8,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@/lib/utils";
-import {
-  WindowMinimise,
-  WindowMaximise,
-  WindowUnmaximise,
-  WindowIsMaximised,
-  Quit,
-  WindowToggleMaximise,
-  Environment,
-} from "@wailsjs/runtime/runtime";
+import { Application, System, Window } from "@wailsio/runtime";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,14 +70,23 @@ function WindowControls({
         style={dragStyle}
       >
         <button
+          name="close"
+          title="Close"
+          type="button"
           onClick={onClose}
           className="w-3 h-3 rounded-full bg-red-500/90 hover:bg-red-500 border border-black/10 flex items-center justify-center outline-none"
         />
         <button
+          name="minimize"
+          title="Minimize"
+          type="button"
           onClick={onMinimize}
           className="w-3 h-3 rounded-full bg-yellow-500/90 hover:bg-yellow-500 border border-black/10 flex items-center justify-center outline-none"
         />
         <button
+          name="maximize"
+          title={isMaximized ? "Restore" : "Maximize"}
+          type="button"
           onClick={onMaximizeToggle}
           className="w-3 h-3 rounded-full bg-green-500/90 hover:bg-green-500 border border-black/10 flex items-center justify-center outline-none"
         />
@@ -137,14 +138,14 @@ export function TitleBar({ className }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
-    Environment()
+    System.Environment()
       .then((env) => {
-        setPlatform(env.platform);
+        setPlatform(env.OS);
       })
       .catch(console.error);
 
     const checkMaximized = () => {
-      WindowIsMaximised().then(setIsMaximized).catch(console.error);
+      Window.IsMaximised().then(setIsMaximized).catch(console.error);
     };
     checkMaximized();
 
@@ -154,12 +155,16 @@ export function TitleBar({ className }: TitleBarProps) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const handleMinimize = () => WindowMinimise();
+  const handleMinimize = () => {
+    void Window.Minimise();
+  };
   const handleMaximizeToggle = () => {
-    WindowToggleMaximise();
+    void Window.ToggleMaximise();
     setIsMaximized(!isMaximized);
   };
-  const handleClose = () => Quit();
+  const handleClose = () => {
+    void Application.Quit();
+  };
 
   const isMac = platform === "darwin";
 

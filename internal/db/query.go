@@ -4,16 +4,14 @@ import (
 	"time"
 )
 
-// QueryResult chứa kết quả của một câu query
 type QueryResult struct {
-	Columns  []string        `json:"columns"`
-	Rows     [][]interface{} `json:"rows"`
-	Affected int64           `json:"affected"`
-	Duration float64         `json:"duration"` // ms
-	Error    string          `json:"error"`
+	Columns  []string `json:"columns"`
+	Rows     [][]any  `json:"rows"`
+	Affected int64    `json:"affected"`
+	Duration float64  `json:"duration"`
+	Error    string   `json:"error"`
 }
 
-// ExecuteQuery thực thi một câu lệnh SQL bất kỳ
 func (m *Manager) ExecuteQuery(connID, sqlStr string) (*QueryResult, error) {
 	conn, err := m.Get(connID)
 	if err != nil {
@@ -25,7 +23,6 @@ func (m *Manager) ExecuteQuery(connID, sqlStr string) (*QueryResult, error) {
 	duration := time.Since(start).Seconds() * 1000
 
 	if err != nil {
-		// Thử Exec nếu Query lỗi (cho các command non-SELECT)
 		res, execErr := conn.DB.Exec(sqlStr)
 		if execErr != nil {
 			return &QueryResult{
@@ -41,18 +38,15 @@ func (m *Manager) ExecuteQuery(connID, sqlStr string) (*QueryResult, error) {
 	}
 	defer rows.Close()
 
-	// Lấy column names
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, err
 	}
 
-	// Prepare data rows
-	var resultRows [][]interface{}
+	var resultRows [][]any
 	for rows.Next() {
-		// Tạo slice pointers để Scan
-		values := make([]interface{}, len(columns))
-		scanArgs := make([]interface{}, len(columns))
+		values := make([]any, len(columns))
+		scanArgs := make([]any, len(columns))
 		for i := range values {
 			scanArgs[i] = &values[i]
 		}
@@ -61,8 +55,7 @@ func (m *Manager) ExecuteQuery(connID, sqlStr string) (*QueryResult, error) {
 			return nil, err
 		}
 
-		// Convert data sang JSON-friendly format
-		row := make([]interface{}, len(columns))
+		row := make([]any, len(columns))
 		for i, v := range values {
 			row[i] = convertValue(v)
 		}
@@ -76,8 +69,7 @@ func (m *Manager) ExecuteQuery(connID, sqlStr string) (*QueryResult, error) {
 	}, rows.Err()
 }
 
-// convertValue chuyển data type sang JSON-safe types
-func convertValue(v interface{}) interface{} {
+func convertValue(v any) any {
 	switch t := v.(type) {
 	case []byte:
 		return string(t)

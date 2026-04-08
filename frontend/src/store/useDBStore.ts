@@ -13,13 +13,16 @@ import {
   Connect,
   Disconnect,
   ActiveConnections,
+  GetLastActiveProfile,
   ListDatabases,
   ListSchemas,
   ListTables,
   DescribeTable,
   ListIndexes,
+  SetLastActiveProfile,
+  ShowMainWindow,
   ExecuteQuery,
-} from "@wailsjs/go/main/App";
+} from "../../bindings/github.com/thtn-dev/table_stack/app";
 
 import type {
   Profile,
@@ -90,6 +93,8 @@ interface DBActions {
   connect: (profileId: string) => Promise<void>;
   disconnect: (profileId: string) => Promise<void>;
   syncActiveConnections: () => Promise<void>;
+  syncLastActiveProfile: () => Promise<void>;
+  openMainWindow: () => Promise<void>;
 
   // ── Schema tree ──────────────────────────────────────────────────────────────
   loadSchemaTree: (profileId: string) => Promise<void>;
@@ -225,6 +230,30 @@ export const useDBStore = create<DBState & DBActions>()(
         }
       },
 
+      syncLastActiveProfile: async () => {
+        try {
+          const id = await GetLastActiveProfile();
+          if (!id) {
+            return;
+          }
+
+          if (!get().activeConnections.has(id)) {
+            return;
+          }
+
+          set((s) => {
+            s.activeProfileId = id;
+          });
+          await get().loadSchemaTree(id);
+        } catch {
+          // Non-fatal — app can still work
+        }
+      },
+
+      openMainWindow: async () => {
+        await ShowMainWindow();
+      },
+
       // ── Schema tree ───────────────────────────────────────────────────────
 
       loadSchemaTree: async (profileId) => {
@@ -294,6 +323,7 @@ export const useDBStore = create<DBState & DBActions>()(
         set((s) => {
           s.activeProfileId = profileId;
         });
+        void SetLastActiveProfile(profileId ?? "");
       },
 
       // ── Column cache ──────────────────────────────────────────────────────
@@ -351,7 +381,9 @@ export const useDBStore = create<DBState & DBActions>()(
         try {
           const res = await ExecuteQuery(profileId, sql);
           set((s) => {
-            if (res.error) {
+            if (!res) {
+              s.queryResult = asyncError("Empty query result");
+            } else if (res.error) {
               s.queryResult = asyncError(res.error, res);
             } else {
               s.queryResult = asyncSuccess(res);

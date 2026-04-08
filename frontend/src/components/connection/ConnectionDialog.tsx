@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 
-import { TestConnection } from "@wailsjs/go/main/App";
+import { TestConnection } from "../../../bindings/github.com/thtn-dev/table_stack/app";
 import { useDBStore } from "@/store";
 import type { Profile } from "@/store";
 import { cn } from "@/lib/utils";
@@ -43,8 +43,14 @@ import { cn } from "@/lib/utils";
 // =============================================================================
 
 const SSL_MODES = ["disable", "require", "verify-ca", "verify-full"] as const;
+const DRIVERS = ["postgres", "mysql"] as const;
+const DEFAULT_PORTS: Record<string, number> = {
+  postgres: 5432,
+  mysql: 3306,
+};
 
 const connectionSchema = z.object({
+  driver: z.enum(DRIVERS),
   name: z.string().min(1, "Name is required"),
   host: z.string().min(1, "Host is required"),
   port: z.number({ error: "Port must be a number" }).int().min(1).max(65535),
@@ -61,6 +67,7 @@ type ConnectionFormValues = z.infer<typeof connectionSchema>;
 // =============================================================================
 
 const DEFAULT_VALUES: ConnectionFormValues = {
+  driver: "postgres",
   name: "",
   host: "localhost",
   port: 5432,
@@ -72,6 +79,9 @@ const DEFAULT_VALUES: ConnectionFormValues = {
 
 function profileToForm(p: Profile): ConnectionFormValues {
   return {
+    driver: (DRIVERS as readonly string[]).includes(p.driver)
+      ? (p.driver as ConnectionFormValues["driver"])
+      : "postgres",
     name: p.name,
     host: p.host,
     port: p.port,
@@ -200,6 +210,7 @@ export function ConnectionDialog({
     control,
     reset,
     getValues,
+    setValue,
     formState: { errors, isDirty },
   } = useForm<ConnectionFormValues>({
     resolver: zodResolver(connectionSchema),
@@ -215,6 +226,16 @@ export function ConnectionDialog({
     }
   }, [open, editProfile, reset]);
 
+  // Auto-update port when driver changes
+  useEffect(() => {
+    const currentDriver = getValues("driver");
+    const currentPort = getValues("port");
+    const defaultPort = DEFAULT_PORTS[currentDriver] ?? 5432;
+    if (defaultPort !== currentPort && !editProfile) {
+      setValue("port", defaultPort);
+    }
+  }, [getValues, setValue, editProfile]);
+
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleTest = async () => {
@@ -225,6 +246,7 @@ export function ConnectionDialog({
     try {
       const result = await TestConnection({
         id: editProfile?.id ?? "",
+        driver: values.driver,
         name: values.name,
         host: values.host,
         port: values.port,
@@ -256,6 +278,7 @@ export function ConnectionDialog({
     try {
       await saveProfile({
         id: editProfile?.id ?? "",
+        driver: values.driver,
         name: values.name,
         host: values.host,
         port: values.port,
@@ -294,8 +317,8 @@ export function ConnectionDialog({
               </DialogTitle>
               <DialogDescription className="mt-0.5">
                 {isEditMode
-                  ? "Update your PostgreSQL connection settings."
-                  : "Configure a new PostgreSQL connection."}
+                  ? "Update your connection settings."
+                  : "Configure a new database connection."}
               </DialogDescription>
             </div>
           </div>
@@ -304,7 +327,6 @@ export function ConnectionDialog({
         {/* Form body */}
         <form id="connection-form" onSubmit={handleSubmit(onSubmit)} noValidate>
           <div className="flex flex-col gap-3 px-4 py-4">
-            {/* Connection name */}
             <Field
               label="Connection Name"
               htmlFor="conn-name"
@@ -317,6 +339,37 @@ export function ConnectionDialog({
                 autoFocus
                 aria-invalid={Boolean(errors.name)}
                 {...register("name")}
+              />
+            </Field>
+
+            {/* Driver */}
+            <Field
+              label="Database Type"
+              htmlFor="conn-driver"
+              error={errors.driver?.message}
+              required
+            >
+              <Controller
+                name="driver"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger
+                      id="conn-driver"
+                      className="w-full"
+                      aria-invalid={Boolean(errors.driver)}
+                    >
+                      <SelectValue placeholder="Select…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DRIVERS.map((d) => (
+                        <SelectItem key={d} value={d}>
+                          {d === "postgres" ? "PostgreSQL" : d === "mysql" ? "MySQL" : d}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               />
             </Field>
 
@@ -362,7 +415,7 @@ export function ConnectionDialog({
               >
                 <Input
                   id="conn-user"
-                  placeholder="postgres"
+                  placeholder="root"
                   autoComplete="username"
                   aria-invalid={Boolean(errors.user)}
                   {...register("user")}
@@ -415,7 +468,7 @@ export function ConnectionDialog({
               >
                 <Input
                   id="conn-db"
-                  placeholder="postgres"
+                  placeholder="mydb"
                   aria-invalid={Boolean(errors.database)}
                   {...register("database")}
                 />
