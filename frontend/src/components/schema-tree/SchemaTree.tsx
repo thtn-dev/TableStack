@@ -129,7 +129,7 @@ function TreeRow({
       {isExpandable ? (
         <Chevron open={Boolean(isExpanded)} />
       ) : (
-        <span className="w-[11px] shrink-0" />
+        <span className="w-2.75 shrink-0" />
       )}
 
       {/* Node icon */}

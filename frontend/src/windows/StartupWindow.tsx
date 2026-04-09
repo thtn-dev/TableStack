@@ -83,7 +83,7 @@ export function StartupWindow() {
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-screen w-screen bg-background text-foreground antialiased">
-      <TitleBar onClose={() => void Window.Close()} />
+      <TitleBar onClose={() => void Window.Close()} showMaximize={false} showRightToolbar={false} showCenterDropdown={false} />
 
       {/* Body */}
       <div className="flex overflow-hidden">
