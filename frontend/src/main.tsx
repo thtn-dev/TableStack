@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./style.css";
+import "@/hooks/useTheme"; // apply persisted theme before first render
 import App from "./App";
 
 const container = document.getElementById("root")!;
