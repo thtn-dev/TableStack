@@ -16,6 +16,7 @@ import { Application, System, Window } from "@wailsio/runtime";
 
 interface TitleBarProps {
   className?: string;
+  onClose?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +134,7 @@ function WindowControls({
 // TitleBar
 // ---------------------------------------------------------------------------
 
-export function TitleBar({ className }: TitleBarProps) {
+export function TitleBar({ className, onClose }: TitleBarProps) {
   const [platform, setPlatform] = useState<string>("windows");
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -163,7 +164,11 @@ export function TitleBar({ className }: TitleBarProps) {
     setIsMaximized(!isMaximized);
   };
   const handleClose = () => {
-    void Application.Quit();
+    if (onClose) {
+      onClose();
+    } else {
+      void Application.Quit();
+    }
   };
 
   const isMac = platform === "darwin";

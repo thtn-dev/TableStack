@@ -11,7 +11,7 @@ createRoot(container).render(
   <React.StrictMode>
     <HashRouter>
       {/* TooltipProvider required by shadcn/ui tooltip component */}
-      <TooltipProvider delayDuration={300}>
+      <TooltipProvider delayDuration={200}>
         <App />
       </TooltipProvider>
     </HashRouter>

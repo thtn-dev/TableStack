@@ -3,6 +3,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Window } from "@wailsio/runtime";
+import { TitleBar } from "@/components/layout/TitleBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,666 +17,217 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  AlertCircleIcon,
   ArrowRight01Icon,
-  CheckmarkCircle01Icon,
-  DatabaseIcon,
-  FloppyDiskIcon,
-  Login01Icon,
+  PlusSignIcon,
   RefreshIcon,
-  Table01Icon,
+  Settings02Icon,
 } from "@hugeicons/core-free-icons";
 import { useDBStore } from "@/store";
 import type { Profile } from "@/store";
 import { cn } from "@/lib/utils";
 
-const STARTUP_SSL_MODES = [
-  "disable",
-  "require",
-  "verify-ca",
-  "verify-full",
-] as const;
 const STARTUP_DRIVERS = ["postgres", "mysql"] as const;
-const STARTUP_DEFAULT_PORTS: Record<string, number> = {
-  postgres: 5432,
-  mysql: 3306,
-};
+const STARTUP_DEFAULT_PORTS: Record<string, number> = { postgres: 5432, mysql: 3306 };
 
 const startupConnectionSchema = z.object({
   driver: z.enum(STARTUP_DRIVERS),
-  name: z.string().min(1, "Name is required"),
-  host: z.string().min(1, "Host is required"),
-  port: z.number({ error: "Port must be a number" }).int().min(1).max(65535),
-  user: z.string().min(1, "User is required"),
+  name: z.string().min(1, "Bắt buộc"),
+  host: z.string().min(1, "Bắt buộc"),
+  port: z.number().int().min(1).max(65535),
+  user: z.string().min(1, "Bắt buộc"),
   password: z.string(),
-  database: z.string().min(1, "Database is required"),
-  sslMode: z.enum(STARTUP_SSL_MODES),
+  database: z.string().min(1, "Bắt buộc"),
+  sslMode: z.string(),
 });
 
 type StartupFormValues = z.infer<typeof startupConnectionSchema>;
 
-const STARTUP_DEFAULT_VALUES: StartupFormValues = {
-  driver: "postgres",
-  name: "",
-  host: "localhost",
-  port: 5432,
-  user: "postgres",
-  password: "",
-  database: "postgres",
-  sslMode: "disable",
-};
-
-const DRIVER_META: Record<
-  StartupFormValues["driver"],
-  {
-    label: string;
-    icon: typeof DatabaseIcon;
-    ringClass: string;
-    tintClass: string;
-  }
-> = {
-  postgres: {
-    label: "PostgreSQL",
-    icon: DatabaseIcon,
-    ringClass: "ring-sky-300/35",
-    tintClass: "text-sky-100",
-  },
-  mysql: {
-    label: "MySQL",
-    icon: Table01Icon,
-    ringClass: "ring-amber-300/35",
-    tintClass: "text-amber-100",
-  },
-};
-
-interface StartupFieldProps {
-  label: string;
-  htmlFor: string;
-  error?: string;
-  required?: boolean;
-  children: React.ReactNode;
-}
-
-function StartupField({
-  label,
-  htmlFor,
-  error,
-  required,
-  children,
-}: StartupFieldProps) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={htmlFor} className="text-slate-100/90">
-        {label}
-        {required && <span className="ml-0.5 text-rose-300">*</span>}
-      </Label>
-      {children}
-      {error && (
-        <p className="text-[11px] text-rose-200" role="alert">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
 export function StartupWindow() {
-  const profilesData = useDBStore((s) => s.profiles.data);
-  const profilesStatus = useDBStore((s) => s.profiles.status);
-  const activeConnectionsKey = useDBStore((s) =>
-    [...s.activeConnections].sort().join(","),
-  );
-  const connectingIdsKey = useDBStore((s) =>
-    [...s.connectingIds].sort().join(","),
-  );
-  const loadProfiles = useDBStore((s) => s.loadProfiles);
-  const saveProfile = useDBStore((s) => s.saveProfile);
-  const connect = useDBStore((s) => s.connect);
-  const setActiveProfile = useDBStore((s) => s.setActiveProfile);
-  const openMainWindow = useDBStore((s) => s.openMainWindow);
-
+  const { 
+    profiles: { data: profilesData, status: profilesStatus }, 
+    loadProfiles, saveProfile, connect, setActiveProfile, openMainWindow, 
+    activeConnections, connectingIds 
+  } = useDBStore();
   const profiles = profilesData ?? [];
-  const activeConnections = activeConnectionsKey
-    ? new Set(activeConnectionsKey.split(",").filter(Boolean))
-    : new Set<string>();
-  const connectingIds = connectingIdsKey
-    ? new Set(connectingIdsKey.split(",").filter(Boolean))
-    : new Set<string>();
-
+  
   const [saving, setSaving] = useState(false);
-  const [formMessage, setFormMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
-  const [connectMessage, setConnectMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
-
-  const {
-    register,
-    control,
-    reset,
-    setValue,
-    watch,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<StartupFormValues>({
+  
+  const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<StartupFormValues>({
     resolver: zodResolver(startupConnectionSchema),
-    defaultValues: STARTUP_DEFAULT_VALUES,
+    defaultValues: { driver: "postgres", host: "localhost", port: 5432, sslMode: "disable" },
   });
 
   const selectedDriver = watch("driver");
-  const currentDriver = selectedDriver ?? STARTUP_DEFAULT_VALUES.driver;
-  const driverMeta = DRIVER_META[currentDriver];
-  const WatermarkIcon = driverMeta.icon;
 
-  useEffect(() => {
-    loadProfiles();
-  }, [loadProfiles]);
-
-  useEffect(() => {
-    setValue("port", STARTUP_DEFAULT_PORTS[currentDriver] ?? 5432);
-  }, [currentDriver, setValue]);
+  useEffect(() => { loadProfiles(); }, [loadProfiles]);
+  useEffect(() => { setValue("port", STARTUP_DEFAULT_PORTS[selectedDriver]); }, [selectedDriver, setValue]);
 
   const handleClose = async () => {
-    try {
-      await openMainWindow();
-      await Window.Close();
-    } catch (err) {
-      setConnectMessage({
-        type: "error",
-        text: `Unable to open workspace window: ${String(err)}`,
-      });
-    }
-  };
-
-  const handleConnect = async (profile: Profile) => {
-    setConnectMessage(null);
-
-    if (activeConnections.has(profile.id)) {
-      setActiveProfile(profile.id);
-      await handleClose();
-      return;
-    }
-
-    try {
-      await connect(profile.id);
-      setActiveProfile(profile.id);
-      await handleClose();
-    } catch (err) {
-      setConnectMessage({
-        type: "error",
-        text: `Failed to connect ${profile.name}: ${String(err)}`,
-      });
-    }
+    await openMainWindow();
+    await Window.Close();
   };
 
   const onSubmit = async (values: StartupFormValues) => {
     setSaving(true);
-    setFormMessage(null);
-
     try {
-      const saved = await saveProfile({
-        id: "",
-        driver: values.driver,
-        name: values.name,
-        host: values.host,
-        port: values.port,
-        user: values.user,
-        password: values.password,
-        database: values.database,
-        sslMode: values.sslMode,
-      });
-
+      const saved = await saveProfile({ ...values, id: "" });
       await connect(saved.id);
       setActiveProfile(saved.id);
-
-      setFormMessage({
-        type: "success",
-        text: "Connection profile saved and connected successfully.",
-      });
       await handleClose();
     } catch (err) {
-      setFormMessage({
-        type: "error",
-        text: `Unable to save/connect profile: ${String(err)}`,
-      });
-      reset({
-        ...STARTUP_DEFAULT_VALUES,
-        driver: values.driver,
-        port: STARTUP_DEFAULT_PORTS[values.driver],
-      });
-      await loadProfiles();
+      console.error(err);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-linear-to-br from-slate-900 via-slate-800 to-cyan-900 text-slate-100">
-      <main className="relative flex h-full w-full items-center justify-center p-4 md:p-6">
-        <div className="pointer-events-none absolute -top-24 -left-10 size-72 rounded-full bg-sky-200/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 right-0 size-80 rounded-full bg-cyan-200/15 blur-3xl" />
+    <div className="grid grid-rows-[auto_1fr] h-screen w-screen bg-background text-foreground antialiased">
+      <TitleBar onClose={() => void Window.Close()} />
 
-        <section className="relative grid h-full w-full max-w-6xl grid-rows-[auto_1fr_auto] gap-3 rounded-3xl border border-white/12 bg-slate-950/45 p-3 shadow-2xl backdrop-blur-md md:h-[92vh] md:grid-rows-[auto_1fr] md:p-4">
-          <header className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/50 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div
-                className={cn(
-                  "flex size-10 items-center justify-center rounded-xl bg-sky-500/20 ring-1",
-                  driverMeta.ringClass,
-                )}
+      {/* Body */}
+      <div className="flex overflow-hidden">
+      {/* Sidebar */}
+      <aside className="flex w-72 flex-col border-r border-border bg-muted/30">
+        <div className="flex items-center justify-between p-4 pb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Connections
+          </h2>
+          <Button variant="ghost" size="icon-sm" onClick={() => loadProfiles()} className="h-6 w-6 text-muted-foreground">
+            {profilesStatus === "loading" ? <Spinner className="size-3" /> : <HugeiconsIcon icon={RefreshIcon} size={14} />}
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {profiles.length === 0 ? (
+            <div className="p-4 text-center text-xs text-muted-foreground">No saved profiles</div>
+          ) : (
+            profiles.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => connect(p.id).then(handleClose)}
+                className="group flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground transition-all"
               >
-                <HugeiconsIcon
-                  icon={driverMeta.icon}
-                  size={18}
-                  className={driverMeta.tintClass}
+                <div 
+                  className={cn(
+                    "size-2 rounded-full", 
+                    activeConnections.has(p.id) 
+                      ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" 
+                      : "bg-muted-foreground/40"
+                  )} 
+                />
+                <div className="flex-1 overflow-hidden">
+                  <p className="truncate text-sm font-medium">{p.name}</p>
+                  <p className="truncate text-[10px] text-muted-foreground uppercase">{p.driver} • {p.host}</p>
+                </div>
+                <HugeiconsIcon icon={ArrowRight01Icon} size={14} className="opacity-0 group-hover:opacity-100 text-muted-foreground" />
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className="p-4 border-t border-border">
+          <Button variant="outline" className="w-full justify-start gap-2 text-muted-foreground" onClick={handleClose}>
+            <HugeiconsIcon icon={Settings02Icon} size={14} />
+            Workspace settings
+          </Button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col items-center justify-center p-8">
+        <div className="w-full max-w-xl">
+          <header className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">New Connection</h1>
+            <p className="text-sm text-muted-foreground">Setup your database credentials to get started.</p>
+          </header>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              {/* Type & Name */}
+              <div className="col-span-1 space-y-2">
+                <Label>Database Type</Label>
+                <Controller
+                  name="driver"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STARTUP_DRIVERS.map(d => (
+                          <SelectItem key={d} value={d}>{d === 'postgres' ? 'PostgreSQL' : 'MySQL'}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 />
               </div>
-              <div>
-                <h1 className="text-lg font-semibold tracking-tight">TableStack</h1>
-                <p className="text-xs text-slate-300/80">
-                  Quick setup for {driverMeta.label}
-                </p>
+              <div className="col-span-1 space-y-2">
+                <Label>Profile Name</Label>
+                <Input {...register("name")} placeholder="e.g. Production" />
+                {errors.name && <span className="text-[10px] text-destructive">{errors.name.message}</span>}
+              </div>
+
+              {/* Host & Port */}
+              <div className="col-span-1 space-y-2">
+                <Label>Host</Label>
+                <Input {...register("host")} placeholder="127.0.0.1" />
+              </div>
+              <div className="col-span-1 space-y-2">
+                <Label>Port</Label>
+                <Input type="number" {...register("port", { valueAsNumber: true })} />
+              </div>
+
+              {/* User & Password */}
+              <div className="col-span-1 space-y-2">
+                <Label>User</Label>
+                <Input {...register("user")} />
+              </div>
+              <div className="col-span-1 space-y-2">
+                <Label>Password</Label>
+                <Input type="password" {...register("password")} placeholder="••••••••" />
+              </div>
+
+              {/* Database & SSL */}
+              <div className="col-span-1 space-y-2">
+                <Label>Database Name</Label>
+                <Input {...register("database")} />
+              </div>
+              <div className="col-span-1 space-y-2">
+                <Label>SSL Mode</Label>
+                <Controller
+                  name="sslMode"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["disable", "require", "verify-ca", "verify-full"].map(m => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </div>
             </div>
 
-            <Button
-              type="button"
-              onClick={() => {
-                void handleClose();
-              }}
-              variant="outline"
-              className="border-white/20 bg-slate-900/50 text-slate-100 hover:bg-slate-800"
-            >
-              Continue to Workspace
-            </Button>
-          </header>
-
-          <div className="grid min-h-0 gap-3 md:grid-cols-[320px_1fr]">
-            <aside className="flex min-h-0 flex-col rounded-2xl border border-white/12 bg-slate-900/55">
-              <div className="flex items-center justify-between border-b border-white/10 px-3 py-2.5">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-300/70">
-                    Saved Connections
-                  </p>
-                  <p className="text-[11px] text-slate-400/80">
-                    Connect instantly from your profiles
-                  </p>
-                </div>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  className="text-slate-200 hover:bg-white/10 hover:text-white"
-                  onClick={() => loadProfiles()}
-                  disabled={profilesStatus === "loading"}
-                  aria-label="Refresh saved profiles"
-                >
-                  {profilesStatus === "loading" ? (
-                    <Spinner className="size-3.5" />
-                  ) : (
-                    <HugeiconsIcon icon={RefreshIcon} size={14} />
-                  )}
-                </Button>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-                {profiles.length === 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 px-3 py-6 text-center">
-                    <HugeiconsIcon
-                      icon={DatabaseIcon}
-                      size={22}
-                      className="text-slate-400/40"
-                    />
-                    <p className="text-xs text-slate-300/85">
-                      No saved connections yet.
-                    </p>
-                    <p className="text-[11px] text-slate-400/80">
-                      Create one from the form on the right.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {profiles.map((profile) => {
-                      const isConnected = activeConnections.has(profile.id);
-                      const isConnecting = connectingIds.has(profile.id);
-
-                      return (
-                        <button
-                          key={profile.id}
-                          type="button"
-                          className={cn(
-                            "group flex w-full items-center justify-between rounded-xl border px-2.5 py-2 text-left transition-colors",
-                            isConnected
-                              ? "border-emerald-300/40 bg-emerald-400/10"
-                              : "border-white/10 bg-white/3 hover:bg-white/6",
-                          )}
-                          onClick={() => {
-                            if (isConnected || !isConnecting) {
-                              void handleConnect(profile);
-                            }
-                          }}
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span
-                              className={cn(
-                                "size-1.5 rounded-full",
-                                isConnected ? "bg-emerald-300" : "bg-slate-500",
-                              )}
-                            />
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-slate-100">
-                                {profile.name}
-                              </p>
-                              <p className="truncate text-[11px] text-slate-400/90">
-                                {profile.driver.toUpperCase()} - {profile.host}:{profile.port}
-                              </p>
-                            </div>
-                          </div>
-
-                          <span className="flex shrink-0 items-center">
-                            {isConnecting ? (
-                              <Spinner className="size-3.5 text-slate-200" />
-                            ) : isConnected ? (
-                              <HugeiconsIcon
-                                icon={CheckmarkCircle01Icon}
-                                size={15}
-                                className="text-emerald-300"
-                              />
-                            ) : (
-                              <HugeiconsIcon
-                                icon={ArrowRight01Icon}
-                                size={14}
-                                className="text-slate-300/70 transition-transform group-hover:translate-x-0.5"
-                              />
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {connectMessage && (
-                <div
-                  className={cn(
-                    "m-2 rounded-lg border px-2.5 py-2 text-[11px]",
-                    connectMessage.type === "success"
-                      ? "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
-                      : "border-rose-300/35 bg-rose-500/10 text-rose-100",
-                  )}
-                  role="status"
-                >
-                  {connectMessage.text}
-                </div>
-              )}
-            </aside>
-
-            <section className="relative min-h-0 overflow-hidden rounded-2xl border border-white/12 bg-slate-900/60">
-              <div className="pointer-events-none absolute inset-0">
-                <HugeiconsIcon
-                  icon={WatermarkIcon}
-                  size={240}
-                  className="absolute -bottom-12 -right-8 text-white/5 blur-[1px]"
-                />
-                <div className="absolute -bottom-12 left-1/3 size-56 rounded-full bg-sky-200/10 blur-3xl" />
-              </div>
-
-              <div className="relative z-10 h-full overflow-y-auto px-4 py-4 md:px-5">
-                <div className="mb-4 flex items-center gap-2">
-                  <div
-                    className={cn(
-                      "flex size-8 items-center justify-center rounded-lg bg-white/8 ring-1",
-                      driverMeta.ringClass,
-                    )}
-                  >
-                    <HugeiconsIcon
-                      icon={driverMeta.icon}
-                      size={15}
-                      className={driverMeta.tintClass}
-                    />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-semibold text-slate-100">
-                      Create New Connection
-                    </h2>
-                    <p className="text-xs text-slate-300/80">
-                      Fill in database settings. The icon updates when you change type.
-                    </p>
-                  </div>
-                </div>
-
-                <form
-                  className="grid grid-cols-1 gap-3 md:grid-cols-2"
-                  onSubmit={handleSubmit(onSubmit)}
-                  noValidate
-                >
-                  <StartupField
-                    label="Database Type"
-                    htmlFor="startup-driver"
-                    required
-                    error={errors.driver?.message}
-                  >
-                    <Controller
-                      name="driver"
-                      control={control}
-                      render={({ field }) => (
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger
-                            id="startup-driver"
-                            className="border-white/20 bg-slate-950/60 text-slate-100"
-                          >
-                            <SelectValue placeholder="Select database" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STARTUP_DRIVERS.map((driver) => (
-                              <SelectItem key={driver} value={driver}>
-                                {DRIVER_META[driver].label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                  </StartupField>
-
-                  <StartupField
-                    label="Connection Name"
-                    htmlFor="startup-name"
-                    required
-                    error={errors.name?.message}
-                  >
-                    <Input
-                      id="startup-name"
-                      placeholder="Production DB"
-                      className="border-white/20 bg-slate-950/60 text-slate-100 placeholder:text-slate-400"
-                      aria-invalid={Boolean(errors.name)}
-                      {...register("name")}
-                    />
-                  </StartupField>
-
-                  <StartupField
-                    label="Host"
-                    htmlFor="startup-host"
-                    required
-                    error={errors.host?.message}
-                  >
-                    <Input
-                      id="startup-host"
-                      placeholder="localhost"
-                      className="border-white/20 bg-slate-950/60 text-slate-100 placeholder:text-slate-400"
-                      aria-invalid={Boolean(errors.host)}
-                      {...register("host")}
-                    />
-                  </StartupField>
-
-                  <StartupField
-                    label="Port"
-                    htmlFor="startup-port"
-                    required
-                    error={errors.port?.message}
-                  >
-                    <Input
-                      id="startup-port"
-                      type="number"
-                      className="border-white/20 bg-slate-950/60 text-slate-100 placeholder:text-slate-400"
-                      aria-invalid={Boolean(errors.port)}
-                      {...register("port", { valueAsNumber: true })}
-                    />
-                  </StartupField>
-
-                  <StartupField
-                    label="User"
-                    htmlFor="startup-user"
-                    required
-                    error={errors.user?.message}
-                  >
-                    <Input
-                      id="startup-user"
-                      placeholder="postgres"
-                      className="border-white/20 bg-slate-950/60 text-slate-100 placeholder:text-slate-400"
-                      aria-invalid={Boolean(errors.user)}
-                      {...register("user")}
-                    />
-                  </StartupField>
-
-                  <StartupField
-                    label="Password"
-                    htmlFor="startup-password"
-                    error={errors.password?.message}
-                  >
-                    <Input
-                      id="startup-password"
-                      type="password"
-                      placeholder="Optional"
-                      className="border-white/20 bg-slate-950/60 text-slate-100 placeholder:text-slate-400"
-                      aria-invalid={Boolean(errors.password)}
-                      {...register("password")}
-                    />
-                  </StartupField>
-
-                  <StartupField
-                    label="Database"
-                    htmlFor="startup-database"
-                    required
-                    error={errors.database?.message}
-                  >
-                    <Input
-                      id="startup-database"
-                      placeholder="postgres"
-                      className="border-white/20 bg-slate-950/60 text-slate-100 placeholder:text-slate-400"
-                      aria-invalid={Boolean(errors.database)}
-                      {...register("database")}
-                    />
-                  </StartupField>
-
-                  <StartupField
-                    label="SSL Mode"
-                    htmlFor="startup-ssl"
-                    error={errors.sslMode?.message}
-                  >
-                    <Controller
-                      name="sslMode"
-                      control={control}
-                      render={({ field }) => (
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger
-                            id="startup-ssl"
-                            className="border-white/20 bg-slate-950/60 text-slate-100"
-                          >
-                            <SelectValue placeholder="Select SSL mode" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STARTUP_SSL_MODES.map((mode) => (
-                              <SelectItem key={mode} value={mode}>
-                                {mode}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                  </StartupField>
-
-                  <div className="md:col-span-2 flex items-center justify-between gap-3 pt-1">
-                    <div className="min-h-5">
-                      {formMessage && (
-                        <p
-                          className={cn(
-                            "text-xs",
-                            formMessage.type === "success"
-                              ? "text-emerald-200"
-                              : "text-rose-200",
-                          )}
-                          role="status"
-                        >
-                          {formMessage.type === "error" && (
-                            <HugeiconsIcon
-                              icon={AlertCircleIcon}
-                              size={13}
-                              className="mr-1 inline"
-                            />
-                          )}
-                          {formMessage.type === "success" && (
-                            <HugeiconsIcon
-                              icon={CheckmarkCircle01Icon}
-                              size={13}
-                              className="mr-1 inline"
-                            />
-                          )}
-                          {formMessage.text}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-white/20 bg-slate-900/50 text-slate-100 hover:bg-slate-800"
-                        onClick={() => {
-                          void handleClose();
-                        }}
-                      >
-                        Later
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={saving}
-                        className="gap-1.5 bg-cyan-300 text-slate-950 hover:bg-cyan-200"
-                      >
-                        {saving ? (
-                          <Spinner className="size-3.5" />
-                        ) : (
-                          <HugeiconsIcon icon={FloppyDiskIcon} size={14} />
-                        )}
-                        Save Connection
-                      </Button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            </section>
-          </div>
-
-          <footer className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/45 px-4 py-2 text-[11px] text-slate-300/85 md:hidden">
-            <span>Tap a saved connection to connect quickly.</span>
-            <Button
-              type="button"
-              size="sm"
-              className="h-7 gap-1.5 bg-sky-300 text-slate-950 hover:bg-sky-200"
-              onClick={() => {
-                void handleClose();
-              }}
-            >
-              <HugeiconsIcon icon={Login01Icon} size={13} />
-              Continue
-            </Button>
-          </footer>
-        </section>
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+              <Button type="button" variant="ghost" onClick={handleClose} className="text-muted-foreground">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving} >
+                Connect & Save
+              </Button>
+            </div>
+          </form>
+        </div>
       </main>
+      </div>
     </div>
   );
 }
