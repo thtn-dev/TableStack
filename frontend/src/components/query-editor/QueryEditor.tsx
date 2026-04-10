@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import CodeMirror, { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { githubLight } from '@uiw/codemirror-theme-github';
+import { androidstudio } from '@uiw/codemirror-theme-androidstudio';
 import { keymap, EditorView } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -15,6 +16,7 @@ import {
 } from "@hugeicons/core-free-icons";
 
 import { useDBStore } from "@/store";
+import { useThemeStore } from "@/hooks/useTheme";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
@@ -106,13 +108,6 @@ export function QueryEditor() {
   const [cursorLine, setCursorLine] = useState(1);
   const [cursorCol, setCursorCol] = useState(1);
 
-  // Fix #4: dùng matchMedia thay MutationObserver để tránh fire trên mọi class change
-  const [isDark, setIsDark] = useState(
-    () =>
-      window.matchMedia("(prefers-color-scheme: dark)").matches ||
-      document.documentElement.classList.contains("dark")
-  );
-
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
   // Fix #1: stable ref — extensions có thể dùng handleRun mới nhất mà không cần recreate
@@ -122,14 +117,7 @@ export function QueryEditor() {
   const selectedTable = useDBStore((s) => s.selectedTable);
   const queryStatus = useDBStore((s) => s.queryResult.status);
   const executeQuery = useDBStore((s) => s.executeQuery);
-
-  // Fix #4: matchMedia listener — chỉ fire khi scheme thực sự thay đổi
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
+  const theme = useThemeStore((s) => s.theme);
 
   // ── Auto-generate SELECT when a table node is clicked ─────────────────────
   useEffect(() => {
@@ -311,7 +299,7 @@ export function QueryEditor() {
           height="100%"
           extensions={extensions}
           onChange={(value) => setSql(value)}
-          theme={isDark ? oneDark : "light"}
+          theme={theme === "dark" ? androidstudio : githubLight}
           basicSetup={{
             lineNumbers: true,
             highlightActiveLine: true,

@@ -64,6 +64,8 @@ func (a *App) SaveProfile(p store.Profile) (store.Profile, error) {
 	plainPw := p.Password
 	p.Password = "" // do not persist plaintext
 
+	prev, prevErr := a.profiles.GetByID(p.ID)
+
 	saved, err := a.profiles.Save(p)
 	if err != nil {
 		return store.Profile{}, err
@@ -74,6 +76,24 @@ func (a *App) SaveProfile(p store.Profile) (store.Profile, error) {
 	if plainPw != "" && plainPw != "********" {
 		if err := a.credentials.SaveConnection(profileToConnConfig(saved), plainPw); err != nil {
 			return store.Profile{}, fmt.Errorf("save credentials: %w", err)
+		}
+	}
+
+	// If this profile is currently connected and effective connection settings
+	// changed, reconnect so live sessions do not keep stale DSN values.
+	if prevErr == nil && a.manager.IsActive(saved.ID) {
+		passwordChanged := plainPw != "" && plainPw != "********"
+		if profileConnSettingsChanged(prev, saved) || passwordChanged {
+			reconnectProfile := saved
+			if passwordChanged {
+				reconnectProfile.Password = plainPw
+			} else if pw, err := a.credentials.GetPassword(saved.ID); err == nil {
+				reconnectProfile.Password = pw
+			}
+
+			if err := a.manager.Add(storeToDBProfile(reconnectProfile)); err != nil {
+				return store.Profile{}, fmt.Errorf("profile saved but reconnect failed: %w", err)
+			}
 		}
 	}
 
@@ -252,6 +272,15 @@ func profileToConnConfig(p store.Profile) store.ConnectionConfig {
 		User:   p.User,
 		DBName: p.Database,
 	}
+}
+
+func profileConnSettingsChanged(before, after store.Profile) bool {
+	return before.Driver != after.Driver ||
+		before.Host != after.Host ||
+		before.Port != after.Port ||
+		before.User != after.User ||
+		before.Database != after.Database ||
+		before.SSLMode != after.SSLMode
 }
 
 // userConfigDir returns (and creates) the OS user-config sub-directory for
