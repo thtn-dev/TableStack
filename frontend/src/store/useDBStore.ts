@@ -152,9 +152,39 @@ export const useDBStore = create<DBState & DBActions>()(
       },
 
       saveProfile: async (profile) => {
+        const isEditing = Boolean(profile.id);
+        const wasConnected = isEditing
+          ? get().activeConnections.has(profile.id)
+          : false;
+
         const saved = await SaveProfile(profile);
         // Refresh list after save
         await get().loadProfiles();
+
+        if (wasConnected) {
+          set((s) => {
+            s.connectingIds.add(saved.id);
+          });
+          try {
+            await Connect(saved.id);
+            set((s) => {
+              s.activeConnections.add(saved.id);
+              s.connectingIds.delete(saved.id);
+              s.activeProfileId = saved.id;
+            });
+            await get().loadSchemaTree(saved.id);
+          } catch (err) {
+            set((s) => {
+              s.activeConnections.delete(saved.id);
+              s.connectingIds.delete(saved.id);
+              delete s.schemaTree[saved.id];
+              if (s.selectedTable?.profileId === saved.id) s.selectedTable = null;
+              if (s.activeProfileId === saved.id) s.activeProfileId = null;
+            });
+            throw err;
+          }
+        }
+
         return saved;
       },
 
