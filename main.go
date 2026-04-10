@@ -17,7 +17,67 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func createMainWindow(app *application.App) *application.WebviewWindow {
+func calculateStartupWindowSize(app *application.App) (int, int) {
+	const (
+		aspectWidth  = 4
+		aspectHeight = 3
+		minWidth     = 640
+		minHeight    = 480
+		fallbackW    = 800
+		fallbackH    = 600
+		maxPercent   = 70
+	)
+
+	screen := app.Screen.GetPrimary()
+	if screen == nil {
+		return fallbackW, fallbackH
+	}
+
+	availableW := screen.WorkArea.Width
+	availableH := screen.WorkArea.Height
+	if availableW <= 0 || availableH <= 0 {
+		availableW = screen.Size.Width
+		availableH = screen.Size.Height
+	}
+	if availableW <= 0 || availableH <= 0 {
+		return fallbackW, fallbackH
+	}
+
+	maxW := (availableW * maxPercent) / 100
+	maxH := (availableH * maxPercent) / 100
+	if maxW <= 0 || maxH <= 0 {
+		return fallbackW, fallbackH
+	}
+
+	width := maxW
+	height := (width * aspectHeight) / aspectWidth
+	if height > maxH {
+		height = maxH
+		width = (height * aspectWidth) / aspectHeight
+	}
+
+	if width < minWidth {
+		width = minWidth
+		height = (width * aspectHeight) / aspectWidth
+	}
+	if height < minHeight {
+		height = minHeight
+		width = (height * aspectWidth) / aspectHeight
+	}
+
+	if width > availableW {
+		width = availableW
+		height = (width * aspectHeight) / aspectWidth
+	}
+	if height > availableH {
+		height = availableH
+		width = (height * aspectWidth) / aspectHeight
+	}
+
+	return width, height
+}
+
+func createMainWindow(app *application.App, onClose func()) *application.WebviewWindow {
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:         "Table stack",
 		Frameless:     true,
@@ -37,6 +97,7 @@ func createMainWindow(app *application.App) *application.WebviewWindow {
 	})
 
 	mainWindow.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
+		onClose()
 		app.Quit()
 	})
 
@@ -69,13 +130,21 @@ func main() {
 
 	var mainWindow *application.WebviewWindow
 	var mainMu sync.Mutex
+	var isQuitting bool
 
 	appService.showMain = func() error {
 		mainMu.Lock()
 		defer mainMu.Unlock()
 
 		if mainWindow == nil {
-			mainWindow = createMainWindow(app)
+			mainWindow = createMainWindow(app, func() {
+				// onClose is called from within mainWindow's WindowClosing handler.
+				// Acquire mainMu so the isQuitting flag is visible to the
+				// startupWindow handler which also runs under mainMu.
+				mainMu.Lock()
+				isQuitting = true
+				mainMu.Unlock()
+			})
 		}
 
 		mainWindow.Maximise()
@@ -83,20 +152,30 @@ func main() {
 		return nil
 	}
 
+	startupWidth, startupHeight := calculateStartupWindowSize(app)
+
 	startupWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "TableStack Startup",
-		Width:            620,
-		Height:           440,
+		Width:            startupWidth,
+		Height:           startupHeight,
+		Frameless:        true,
 		DisableResize:    true,
 		AlwaysOnTop:      true,
 		BackgroundColour: application.NewRGB(20, 28, 41),
-		URL:              "/#/startup",
+		Mac: application.MacWindow{
+			Backdrop: application.MacBackdropTranslucent,
+			TitleBar: application.MacTitleBarHiddenInset,
+		},
+		URL: "/#/startup",
 	})
 
 	startupWindow.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
 		mainMu.Lock()
 		defer mainMu.Unlock()
 
+		if isQuitting {
+			return
+		}
 		if mainWindow == nil {
 			app.Quit()
 			return

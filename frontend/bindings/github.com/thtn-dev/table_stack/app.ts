@@ -23,10 +23,24 @@ export function ActiveConnections(): $CancellablePromise<string[]> {
     });
 }
 
+/**
+ * Connect opens a live connection for profileID, retrieving the decrypted
+ * password from the CredentialManager.
+ */
 export function Connect(profileID: string): $CancellablePromise<void> {
     return $Call.ByID(164877153, profileID);
 }
 
+/**
+ * DeleteConnection removes the ConnectionConfig for connectionID.
+ */
+export function DeleteConnection(connectionID: string): $CancellablePromise<void> {
+    return $Call.ByID(3428926502, connectionID);
+}
+
+/**
+ * DeleteProfile removes the profile and its stored credential.
+ */
 export function DeleteProfile(id: string): $CancellablePromise<void> {
     return $Call.ByID(2457157279, id);
 }
@@ -48,6 +62,14 @@ export function ExecuteQuery(profileID: string, sqlStr: string): $CancellablePro
 }
 
 /**
+ * GetConnectionPassword decrypts and returns the stored password for
+ * connectionID. The plaintext is only transmitted over the local IPC bridge.
+ */
+export function GetConnectionPassword(connectionID: string): $CancellablePromise<string> {
+    return $Call.ByID(1106561582, connectionID);
+}
+
+/**
  * GetLastActiveProfile returns the profile ID selected last across windows.
  */
 export function GetLastActiveProfile(): $CancellablePromise<string> {
@@ -58,21 +80,33 @@ export function IsConnected(profileID: string): $CancellablePromise<boolean> {
     return $Call.ByID(236330520, profileID);
 }
 
+/**
+ * ListConnections returns all stored ConnectionConfigs with passwords omitted.
+ */
+export function ListConnections(): $CancellablePromise<store$0.ConnectionConfig[]> {
+    return $Call.ByID(786053378).then(($result: any) => {
+        return $$createType6($result);
+    });
+}
+
 export function ListDatabases(profileID: string): $CancellablePromise<db$0.DatabaseInfo[]> {
     return $Call.ByID(4238628917, profileID).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType8($result);
     });
 }
 
 export function ListIndexes(profileID: string, schema: string, table: string): $CancellablePromise<db$0.IndexInfo[]> {
     return $Call.ByID(3383199879, profileID, schema, table).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType10($result);
     });
 }
 
+/**
+ * ListProfiles returns all profiles with passwords masked.
+ */
 export function ListProfiles(): $CancellablePromise<store$0.Profile[]> {
     return $Call.ByID(1957526603).then(($result: any) => {
-        return $$createType10($result);
+        return $$createType12($result);
     });
 }
 
@@ -84,7 +118,7 @@ export function ListSchemas(profileID: string): $CancellablePromise<string[]> {
 
 export function ListTables(profileID: string, schema: string): $CancellablePromise<db$0.TableInfo[]> {
     return $Call.ByID(364749488, profileID, schema).then(($result: any) => {
-        return $$createType12($result);
+        return $$createType14($result);
     });
 }
 
@@ -94,9 +128,23 @@ export function RegisteredDrivers(): $CancellablePromise<string[]> {
     });
 }
 
+/**
+ * SaveConnection stores a ConnectionConfig with an AES-256-GCM encrypted
+ * password in the local JSON file. Use this when managing connections
+ * independently of the Profile system.
+ */
+export function SaveConnection(cfg: store$0.ConnectionConfig, plainPassword: string): $CancellablePromise<void> {
+    return $Call.ByID(865625064, cfg, plainPassword);
+}
+
+/**
+ * SaveProfile persists profile metadata and encrypts the password via the
+ * OS-keychain-backed CredentialManager. The plaintext password is never
+ * written to profiles.json.
+ */
 export function SaveProfile(p: store$0.Profile): $CancellablePromise<store$0.Profile> {
     return $Call.ByID(406053493, p).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType11($result);
     });
 }
 
@@ -114,9 +162,13 @@ export function ShowMainWindow(): $CancellablePromise<void> {
     return $Call.ByID(3189675457);
 }
 
+/**
+ * TestConnection tests connectivity. If the caller omits or masks the password,
+ * the stored credential is fetched automatically.
+ */
 export function TestConnection(p: store$0.Profile): $CancellablePromise<db$0.ConnectResult> {
     return $Call.ByID(1257240193, p).then(($result: any) => {
-        return $$createType13($result);
+        return $$createType15($result);
     });
 }
 
@@ -126,12 +178,14 @@ const $$createType1 = db$0.ColumnInfo.createFrom;
 const $$createType2 = $Create.Array($$createType1);
 const $$createType3 = db$0.QueryResult.createFrom;
 const $$createType4 = $Create.Nullable($$createType3);
-const $$createType5 = db$0.DatabaseInfo.createFrom;
+const $$createType5 = store$0.ConnectionConfig.createFrom;
 const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = db$0.IndexInfo.createFrom;
+const $$createType7 = db$0.DatabaseInfo.createFrom;
 const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = store$0.Profile.createFrom;
+const $$createType9 = db$0.IndexInfo.createFrom;
 const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = db$0.TableInfo.createFrom;
+const $$createType11 = store$0.Profile.createFrom;
 const $$createType12 = $Create.Array($$createType11);
-const $$createType13 = db$0.ConnectResult.createFrom;
+const $$createType13 = db$0.TableInfo.createFrom;
+const $$createType14 = $Create.Array($$createType13);
+const $$createType15 = db$0.ConnectResult.createFrom;

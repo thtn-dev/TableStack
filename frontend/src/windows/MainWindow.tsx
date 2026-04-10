@@ -76,7 +76,7 @@ function MainContent({ onNewConnection }: MainContentProps) {
             Welcome to TableStack
           </p>
           <p className="text-sm text-muted-foreground/60 leading-relaxed">
-            Connect to a PostgreSQL database from the sidebar or create a new
+            Connect to a database from the sidebar or create a new
             connection profile to get started.
           </p>
           {profiles.length === 0 && (
