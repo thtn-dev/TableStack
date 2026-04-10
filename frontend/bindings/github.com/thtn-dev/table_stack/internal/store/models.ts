@@ -6,6 +6,59 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * ConnectionConfig holds a connection's metadata. EncryptedPassword is a
+ * base64-encoded blob of (nonce || AES-256-GCM ciphertext+tag).
+ */
+export class ConnectionConfig {
+    "id": string;
+    "name": string;
+    "driver": string;
+    "host": string;
+    "port": number;
+    "user": string;
+    "dbname": string;
+    "encrypted_password": string;
+
+    /** Creates a new ConnectionConfig instance. */
+    constructor($$source: Partial<ConnectionConfig> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("driver" in $$source)) {
+            this["driver"] = "";
+        }
+        if (!("host" in $$source)) {
+            this["host"] = "";
+        }
+        if (!("port" in $$source)) {
+            this["port"] = 0;
+        }
+        if (!("user" in $$source)) {
+            this["user"] = "";
+        }
+        if (!("dbname" in $$source)) {
+            this["dbname"] = "";
+        }
+        if (!("encrypted_password" in $$source)) {
+            this["encrypted_password"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ConnectionConfig instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ConnectionConfig {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ConnectionConfig($$parsedSource as Partial<ConnectionConfig>);
+    }
+}
+
+/**
  * Profile — mirror của db.Profile, tách riêng để store không import db
  */
 export class Profile {

@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "wails3: dev",
+      "type": "shell",
+      "command": "wails3",
+      "args": [
+        "dev",
+        "-config",
+        "./build/config.yml",
+        "-port",
+        "9245"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "wails3: build (DEV=true)",
+      "type": "shell",
+      "command": "wails3",
+      "args": [
+        "build",
+        "DEV=true",
+        "-config",
+        "./build/config.yml"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
