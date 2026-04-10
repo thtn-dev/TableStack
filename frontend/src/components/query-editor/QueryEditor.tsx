@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import CodeMirror, { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { githubLight } from '@uiw/codemirror-theme-github';
+import { androidstudio } from '@uiw/codemirror-theme-androidstudio';
 import { keymap, EditorView } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -15,6 +16,7 @@ import {
 } from "@hugeicons/core-free-icons";
 
 import { useDBStore } from "@/store";
+import { useThemeStore } from "@/hooks/useTheme";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
@@ -28,34 +30,12 @@ import {
 // Helpers
 // =============================================================================
 
-/**
- * Lightweight SQL formatter: ensures each major clause starts on a new line
- * and trims each line. Not a full AST formatter — intentionally simple.
- */
 function formatSQL(input: string): string {
   const clauses = [
-    "SELECT",
-    "FROM",
-    "WHERE",
-    "LEFT JOIN",
-    "RIGHT JOIN",
-    "INNER JOIN",
-    "FULL JOIN",
-    "CROSS JOIN",
-    "JOIN",
-    "GROUP BY",
-    "ORDER BY",
-    "HAVING",
-    "LIMIT",
-    "OFFSET",
-    "UNION ALL",
-    "UNION",
-    "INSERT INTO",
-    "VALUES",
-    "UPDATE",
-    "SET",
-    "DELETE FROM",
-    "WITH",
+    "SELECT", "FROM", "WHERE", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN",
+    "FULL JOIN", "CROSS JOIN", "JOIN", "GROUP BY", "ORDER BY", "HAVING",
+    "LIMIT", "OFFSET", "UNION ALL", "UNION", "INSERT INTO", "VALUES",
+    "UPDATE", "SET", "DELETE FROM", "WITH",
   ];
   let result = input;
   clauses.forEach((kw) => {
@@ -70,6 +50,53 @@ function formatSQL(input: string): string {
 }
 
 // =============================================================================
+// Fix #2: Static theme — defined at module level, NEVER recreated
+// =============================================================================
+const staticTheme = EditorView.theme({
+  "&": {
+    fontSize: "13px",
+    fontFamily: 'var(--font-mono, "JetBrains Mono", "Fira Code", monospace)',
+    height: "100%",
+  },
+  ".cm-scroller": {
+    overflow: "auto",
+    lineHeight: "1.6",
+    fontFamily: "inherit",
+  },
+  ".cm-gutters": {
+    backgroundColor: "transparent",
+    borderRight: "1px solid hsl(var(--border) / 0.4)",
+    color: "hsl(var(--muted-foreground) / 0.4)",
+    minWidth: "40px",
+  },
+  ".cm-activeLineGutter": {
+    backgroundColor: "hsl(var(--muted) / 0.5)",
+  },
+  ".cm-activeLine": {
+    backgroundColor: "hsl(var(--muted) / 0.25)",
+  },
+  ".cm-focused .cm-cursor": {
+    borderLeftColor: "hsl(var(--foreground))",
+  },
+  ".cm-selectionBackground, .cm-content ::selection": {
+    backgroundColor: "rgba(59, 130, 246, 0.3) !important",
+  },
+  ".cm-tooltip-autocomplete": {
+    border: "1px solid hsl(var(--border))",
+    borderRadius: "6px",
+    backgroundColor: "hsl(var(--popover))",
+    color: "hsl(var(--popover-foreground))",
+  },
+  ".cm-tooltip-autocomplete ul li[aria-selected]": {
+    backgroundColor: "hsl(var(--accent))",
+    color: "hsl(var(--accent-foreground))",
+  },
+  ".cm-editor.cm-focused": {
+    outline: "none",
+  },
+});
+
+// =============================================================================
 // QueryEditor Component
 // =============================================================================
 
@@ -80,28 +107,17 @@ export function QueryEditor() {
   const [copied, setCopied] = useState(false);
   const [cursorLine, setCursorLine] = useState(1);
   const [cursorCol, setCursorCol] = useState(1);
-  const [isDark, setIsDark] = useState(
-    document.documentElement.classList.contains("dark")
-  );
 
   const editorRef = useRef<ReactCodeMirrorRef>(null);
+
+  // Fix #1: stable ref — extensions có thể dùng handleRun mới nhất mà không cần recreate
+  const handleRunRef = useRef<() => void>(() => {});
 
   const activeProfileId = useDBStore((s) => s.activeProfileId);
   const selectedTable = useDBStore((s) => s.selectedTable);
   const queryStatus = useDBStore((s) => s.queryResult.status);
   const executeQuery = useDBStore((s) => s.executeQuery);
-
-  // ── Dark-mode observer (follows shadcn `class="dark"` on <html>) ──────────
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains("dark"));
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-    return () => observer.disconnect();
-  }, []);
+  const theme = useThemeStore((s) => s.theme);
 
   // ── Auto-generate SELECT when a table node is clicked ─────────────────────
   useEffect(() => {
@@ -117,6 +133,11 @@ export function QueryEditor() {
     await executeQuery(activeProfileId, sql_value);
   }, [activeProfileId, sql_value, queryStatus, executeQuery]);
 
+  // Fix #1: sync ref mỗi khi handleRun thay đổi — giữ extensions không bị recreate
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  }, [handleRun]);
+
   // ── Toolbar actions ───────────────────────────────────────────────────────
   const handleClear = useCallback(() => setSql(""), []);
 
@@ -130,27 +151,9 @@ export function QueryEditor() {
     setSql((prev) => formatSQL(prev));
   }, []);
 
-  // ── CodeMirror extensions ─────────────────────────────────────────────────
-  // handleRun is a stable useCallback — safe to include in useMemo deps.
-  const extensions = useMemo(
-    () => [
-      // SQL language with PostgreSQL dialect + autocompletion
-      sql({ dialect: PostgreSQL }),
-
-      // Ctrl/Cmd+Enter → run query (highest precedence so it overrides CM defaults)
-      Prec.highest(
-        keymap.of([
-          {
-            key: "Mod-Enter",
-            run: () => {
-              handleRun();
-              return true;
-            },
-          },
-        ])
-      ),
-
-      // Cursor position tracking for Ln/Col indicator
+  // Fix #3: cursor listener tách riêng, deps rỗng — setCursorLine/Col là stable refs
+  const cursorUpdateListener = useMemo(
+    () =>
       EditorView.updateListener.of((update) => {
         if (update.selectionSet) {
           const pos = update.state.selection.main.head;
@@ -159,62 +162,35 @@ export function QueryEditor() {
           setCursorCol(pos - line.from + 1);
         }
       }),
+    []
+  );
 
-      // Theme overrides — uses shadcn CSS variables so dark/light just works
-      EditorView.theme({
-        "&": {
-          fontSize: "13px",
-          fontFamily:
-            'var(--font-mono, "JetBrains Mono", "Fira Code", monospace)',
-          height: "100%",
-        },
-        ".cm-scroller": {
-          overflow: "auto",
-          lineHeight: "1.6",
-          fontFamily: "inherit",
-        },
-        ".cm-gutters": {
-          backgroundColor: "transparent",
-          borderRight: "1px solid hsl(var(--border) / 0.4)",
-          color: "hsl(var(--muted-foreground) / 0.4)",
-          minWidth: "40px",
-        },
-        ".cm-activeLineGutter": {
-          backgroundColor: "hsl(var(--muted) / 0.5)",
-        },
-        ".cm-activeLine": {
-          backgroundColor: "hsl(var(--muted) / 0.25)",
-        },
-        ".cm-focused .cm-cursor": {
-          borderLeftColor: "hsl(var(--foreground))",
-        },
-        ".cm-selectionBackground, .cm-content ::selection": {
-          backgroundColor: "rgba(59, 130, 246, 0.3) !important",
-        },
-        ".cm-tooltip-autocomplete": {
-          border: "1px solid hsl(var(--border))",
-          borderRadius: "6px",
-          backgroundColor: "hsl(var(--popover))",
-          color: "hsl(var(--popover-foreground))",
-        },
-        ".cm-tooltip-autocomplete ul li[aria-selected]": {
-          backgroundColor: "hsl(var(--accent))",
-          color: "hsl(var(--accent-foreground))",
-        },
-        // Remove default CM focus outline — shadcn handles this
-        ".cm-editor.cm-focused": {
-          outline: "none",
-        },
-      }),
+  // Fix #1 + #2 + #3: extensions chỉ được tạo đúng 1 lần
+  const extensions = useMemo(
+    () => [
+      sql({ dialect: PostgreSQL }),
+      Prec.highest(
+        keymap.of([
+          {
+            key: "Mod-Enter",
+            run: () => {
+              // luôn gọi phiên bản mới nhất của handleRun qua ref
+              handleRunRef.current();
+              return true;
+            },
+          },
+        ])
+      ),
+      cursorUpdateListener,
+      staticTheme,
     ],
-    [handleRun]
+    [cursorUpdateListener]
   );
 
   return (
     <div className="flex h-full flex-col bg-background">
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div className="flex h-10 shrink-0 items-center justify-between px-3 border-b border-border/40 bg-muted/20">
-        {/* Left: action buttons */}
         <div className="flex items-center gap-1.5">
           {/* Run */}
           <Button
@@ -298,7 +274,6 @@ export function QueryEditor() {
             </div>
           )}
 
-          {/* Cursor position */}
           <span className="text-[11px] font-mono text-muted-foreground/50 tabular-nums">
             Ln {cursorLine}, Col {cursorCol}
           </span>
@@ -324,7 +299,7 @@ export function QueryEditor() {
           height="100%"
           extensions={extensions}
           onChange={(value) => setSql(value)}
-          theme={isDark ? oneDark : "light"}
+          theme={theme === "dark" ? androidstudio : githubLight}
           basicSetup={{
             lineNumbers: true,
             highlightActiveLine: true,
@@ -333,7 +308,7 @@ export function QueryEditor() {
             indentOnInput: true,
             bracketMatching: true,
             closeBrackets: true,
-            searchKeymap: false, // avoid Ctrl+F conflict
+            searchKeymap: false,
           }}
           className="h-full"
         />
