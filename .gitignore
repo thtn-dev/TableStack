@@ -3,3 +3,4 @@ node_modules
 frontend/dist
 .task/
 bin/
+.claude/settings.local.json

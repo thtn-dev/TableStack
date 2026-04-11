@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(go env:*)",
-      "Read(//e/Workspace/gogoap/table_stack/$\\(go env GOPATH\\)/pkg/mod/github.com/wailsapp/wails/v3@v3.0.0-alpha.74/pkg/application/**)"
+      "Read(//e/Workspace/gogoap/table_stack/$\\(go env GOPATH\\)/pkg/mod/github.com/wailsapp/wails/v3@v3.0.0-alpha.74/pkg/application/**)",
+      "mcp__context7__query-docs"
     ]
+  },
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "ctx7sk-e9b502f8-4fe7-4bc1-a79f-c12a91e124d4"
+      }
+    }
   }
 }
