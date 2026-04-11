@@ -71,6 +71,7 @@ export class Profile {
     "password": string;
     "database": string;
     "sslMode": string;
+    "tag": Tag;
 
     /** Creates a new Profile instance. */
     constructor($$source: Partial<Profile> = {}) {
@@ -101,6 +102,9 @@ export class Profile {
         if (!("sslMode" in $$source)) {
             this["sslMode"] = "";
         }
+        if (!("tag" in $$source)) {
+            this["tag"] = (new Tag());
+        }
 
         Object.assign(this, $$source);
     }
@@ -109,7 +113,46 @@ export class Profile {
      * Creates a new Profile instance from a string or object.
      */
     static createFrom($$source: any = {}): Profile {
+        const $$createField9_0 = $$createType0;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("tag" in $$parsedSource) {
+            $$parsedSource["tag"] = $$createField9_0($$parsedSource["tag"]);
+        }
         return new Profile($$parsedSource as Partial<Profile>);
     }
 }
+
+/**
+ * Tag gắn nhãn màu cho một profile kết nối.
+ */
+export class Tag {
+    "name": string;
+
+    /**
+     * hex color, e.g. "#3B82F6"
+     */
+    "color": string;
+
+    /** Creates a new Tag instance. */
+    constructor($$source: Partial<Tag> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("color" in $$source)) {
+            this["color"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Tag instance from a string or object.
+     */
+    static createFrom($$source: any = {}): Tag {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new Tag($$parsedSource as Partial<Tag>);
+    }
+}
+
+// Private type creation functions
+const $$createType0 = Tag.createFrom;

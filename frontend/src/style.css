@@ -45,7 +45,7 @@ textarea,
   --chart-5: #b97033;
   
   /* Giảm bo tròn để UI sắc sảo, chuyên nghiệp hơn */
-  --radius: 0.125rem; 
+  --radius: 0.25rem; 
   
   --sidebar: #f3f3f3;
   --sidebar-foreground: #616161;

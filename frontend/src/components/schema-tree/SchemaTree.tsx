@@ -86,7 +86,7 @@ function SectionLabel({ label }: { label: string }) {
 interface TreeRowProps {
   depth: number;
   icon: React.ReactNode;
-  label: string;
+  label: React.ReactNode;
   isSelected?: boolean;
   isExpandable?: boolean;
   isExpanded?: boolean;
@@ -428,6 +428,9 @@ function ProfileNode({
     <span className="block h-1.5 w-1.5 rounded-full bg-muted-foreground/30 shrink-0" />
   );
 
+  const tagColor = profile.tag?.color || "#6B7280";
+  const tagName = profile.tag?.name || "Default";
+
   return (
     <>
       <TreeRow
@@ -441,8 +444,9 @@ function ProfileNode({
               <HugeiconsIcon
                 icon={DatabaseIcon}
                 size={13}
+                style={{ color: isConnected ? tagColor : undefined }}
                 className={cn(
-                  isConnected ? "text-primary" : "text-muted-foreground",
+                  !isConnected && "text-muted-foreground",
                 )}
               />
               <span className="absolute -bottom-0.5 -right-0.5">
@@ -451,7 +455,16 @@ function ProfileNode({
             </div>
           )
         }
-        label={profile.name}
+        label={
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span
+              className="inline-block h-2 w-2 shrink-0 rounded-sm"
+              style={{ backgroundColor: tagColor }}
+              title={tagName}
+            />
+            <span className="truncate">{profile.name}</span>
+          </span>
+        }
         isExpandable={isConnected}
         isExpanded={isExpanded}
         onClick={() => {
