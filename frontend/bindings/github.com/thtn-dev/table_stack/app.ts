@@ -15,6 +15,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as db$0 from "./internal/db/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as mutation$0 from "./internal/mutation/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as session$0 from "./internal/session/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -231,6 +234,29 @@ export function TestConnection(p: store$0.Profile): $CancellablePromise<db$0.Con
     });
 }
 
+/**
+ * UpdateRows updates one or more rows in the database within a single
+ * transaction. If any row fails the entire operation is rolled back.
+ * NOTE: Method ID computed from FNV-32a("main.App.UpdateRows").
+ * Run `wails3 dev` to regenerate with the authoritative ID.
+ */
+export function UpdateRows(connID: string, req: mutation$0.UpdateBulkRequest): $CancellablePromise<mutation$0.MutationResponse> {
+    return $Call.ByID(119372497, connID, req).then(($result: any) => {
+        return $$createTypeMutationResponse($result);
+    });
+}
+
+/**
+ * DeleteRows deletes the specified rows within a single transaction.
+ * NOTE: Method ID computed from FNV-32a("main.App.DeleteRows").
+ * Run `wails3 dev` to regenerate with the authoritative ID.
+ */
+export function DeleteRows(connID: string, req: mutation$0.DeleteRowsRequest): $CancellablePromise<mutation$0.MutationResponse> {
+    return $Call.ByID(344276775, connID, req).then(($result: any) => {
+        return $$createTypeMutationResponse($result);
+    });
+}
+
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
 const $$createType1 = db$0.ColumnInfo.createFrom;
@@ -252,3 +278,4 @@ const $$createType16 = $Create.Nullable($$createType15);
 const $$createType17 = session$0.QueryTab.createFrom;
 const $$createType18 = $Create.Nullable($$createType17);
 const $$createType19 = db$0.ConnectResult.createFrom;
+const $$createTypeMutationResponse = mutation$0.MutationResponse.createFrom;

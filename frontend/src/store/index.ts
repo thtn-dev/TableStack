@@ -1,5 +1,14 @@
 export { useDBStore } from "./useDBStore";
 export {
+  useMutationStore,
+  selectIsRowDirty,
+  selectIsCellDirty,
+  selectIsRowSelected,
+  selectSelectedCount,
+  selectHasDirty,
+  buildRowKey,
+} from "./mutationStore";
+export {
   useEditorStore,
   selectActiveTab,
   selectHasDirtyTabs,

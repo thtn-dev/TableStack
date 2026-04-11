@@ -1,8 +1,15 @@
-import { useRef, useMemo, useCallback } from "react";
+import {
+  useRef,
+  useMemo,
+  useCallback,
+  useState,
+} from "react";
 import {
   useReactTable,
   getCoreRowModel,
   flexRender,
+  type ColumnDef,
+  type RowSelectionState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -12,19 +19,56 @@ import {
   Tick01Icon,
   Clock01Icon,
   Layers01Icon,
+  Delete01Icon,
+  FloppyDiskIcon,
+  Cancel01Icon,
 } from "@hugeicons/core-free-icons";
 
-import { useDBStore } from "@/store";
+import { useDBStore, toTableCacheKey } from "@/store";
+import { useMutationStore, selectHasDirty, selectSelectedCount, buildRowKey } from "@/store/mutationStore";
+import { extractPrimaryKeys } from "@/types/mutation";
 import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { EditableCell } from "./EditableCell";
+import { toast } from "sonner";
 
 // =============================================================================
-// ResultPanel Component
+// ResultPanel
 // =============================================================================
 
 export function ResultPanel() {
   const resultState = useDBStore((s) => s.queryResult);
+  const selectedTable = useDBStore((s) => s.selectedTable);
+  const activeProfileId = useDBStore((s) => s.activeProfileId);
+  const columnCache = useDBStore((s) => s.columnCache);
+
   const { data, status, error } = resultState;
+
+  // Derive PK columns from column cache when a table is selected
+  const pkColumns = useMemo(() => {
+    if (!selectedTable) return [];
+    const key = toTableCacheKey(selectedTable);
+    const cols = columnCache[key]?.data ?? [];
+    return cols.filter((c) => c.isPrimaryKey).map((c) => c.name);
+  }, [selectedTable, columnCache]);
+
+  const columnDataTypes = useMemo(() => {
+    if (!selectedTable) return {} as Record<string, string>;
+    const key = toTableCacheKey(selectedTable);
+    const cols = columnCache[key]?.data ?? [];
+    return Object.fromEntries(cols.map((c) => [c.name, c.dataType]));
+  }, [selectedTable, columnCache]);
 
   // ── Render States ────────────────────────────────────────────────────────
 
@@ -99,15 +143,11 @@ export function ResultPanel() {
     );
   }
 
-  // Columns present but zero rows — empty table.
-  // Do NOT mount VirtualTable with 0 rows: the virtualizer enters a
-  // measure→re-render loop when the scroll container is flex-1 and
-  // there's no body content to establish height. Show a static message.
+  // Columns present but zero rows
   const rowCount = data.rows?.length ?? 0;
   if (rowCount === 0) {
     return (
       <div className="flex flex-col h-full bg-background overflow-hidden">
-        {/* Show column headers so the user sees the schema */}
         <div className="overflow-auto border-b border-border/40">
           <table
             className="border-separate border-spacing-0"
@@ -135,7 +175,6 @@ export function ResultPanel() {
             Query returned 0 rows
           </p>
         </div>
-        {/* Status bar */}
         <div className="h-7 shrink-0 flex items-center justify-between px-3 border-t border-border/40 bg-muted/20 text-[10px] text-muted-foreground/70 font-medium tracking-wide select-none">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">
@@ -156,64 +195,195 @@ export function ResultPanel() {
     );
   }
 
-  return <VirtualTable key={data.duration} result={data} />;
+  const editEnabled =
+    pkColumns.length > 0 &&
+    !!selectedTable &&
+    !!activeProfileId;
+
+  return (
+    <VirtualTable
+      key={data.duration}
+      result={data}
+      pkColumns={pkColumns}
+      columnDataTypes={columnDataTypes}
+      editEnabled={editEnabled}
+      connID={activeProfileId ?? ""}
+      schema={selectedTable?.schema ?? ""}
+      table={selectedTable?.table ?? ""}
+    />
+  );
 }
 
 // =============================================================================
-// VirtualTable — correct TanStack Virtual pattern for <table> elements
-// Uses padding rows (not absolute positioning) to avoid browser layout thrash.
+// VirtualTable — TanStack Virtual with optional edit/delete mode
 // =============================================================================
 
-function VirtualTable({ result }: { result: any }) {
-  const tableContainerRef = useRef<HTMLDivElement>(null);
+interface VirtualTableProps {
+  result: any;
+  pkColumns: string[];
+  columnDataTypes: Record<string, string>;
+  editEnabled: boolean;
+  connID: string;
+  schema: string;
+  table: string;
+}
 
-  // ── Stabilise data references so useMemo deps never change identity ──────
-  // result prop is a plain object from Zustand — columns/rows are stable between
-  // re-renders of the SAME result. We read them once here.
+function VirtualTable({
+  result,
+  pkColumns,
+  columnDataTypes,
+  editEnabled,
+  connID,
+  schema,
+  table,
+}: VirtualTableProps) {
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
   const columnNames: string[] = result.columns ?? [];
   const rawRows: any[][] = result.rows ?? [];
 
-  // ── Column definitions — stable as long as column names don't change ──────
-  const colDefs = useMemo(
-    () =>
-      columnNames.map((col: string, index: number) => ({
-        header: col,
-        // accessorFn reads a specific index from each row array
-        accessorFn: (row: any[]) => row[index],
-        id: col + "_" + index, // stable id — NOT just the index string
-        cell: ({ getValue }: any) => {
-          const val = getValue();
-          if (val === null || val === undefined)
-            return (
-              <span className="text-muted-foreground/30 italic text-[11px]">
-                NULL
-              </span>
-            );
-          if (typeof val === "boolean")
-            return (
-              <span className="text-blue-500 font-semibold text-[11px]">
-                {val ? "TRUE" : "FALSE"}
-              </span>
-            );
-          return <span className="text-[12px]">{String(val)}</span>;
-        },
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [result], // re-compute only when the result object itself changes (new query)
+  const {
+    dirtyRows,
+    editingCell,
+    isSaving,
+    isDeleting,
+    selectedRowKeys,
+    setCellValue,
+    clearAllDirty,
+    setEditingCell,
+    clearEditingCell,
+    toggleRowSelection,
+    selectAllRows,
+    deselectAllRows,
+    saveChanges,
+    deleteSelected,
+    hasDirtyRows,
+  } = useMutationStore();
+
+  const hasDirty = useMutationStore(selectHasDirty);
+  const selectedCount = useMutationStore(selectSelectedCount);
+
+  // Build a row key for a raw data row
+  const getRowKey = useCallback(
+    (row: any[]) => {
+      const pks = extractPrimaryKeys(row, columnNames, pkColumns);
+      if (!pks) return null;
+      return buildRowKey(pks);
+    },
+    [columnNames, pkColumns],
   );
 
-  // ── TanStack Table ────────────────────────────────────────────────────────
-  const table = useReactTable({
+  // All visible row keys (used for select-all)
+  const allRowKeys = useMemo(
+    () =>
+      rawRows
+        .map(getRowKey)
+        .filter((k): k is string => k !== null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rawRows, columnNames, pkColumns],
+  );
+
+  const isAllSelected =
+    allRowKeys.length > 0 && allRowKeys.every((k) => selectedRowKeys.has(k));
+  const isIndeterminate =
+    !isAllSelected && allRowKeys.some((k) => selectedRowKeys.has(k));
+
+  // ── Column definitions ───────────────────────────────────────────────────
+
+  const colDefs = useMemo((): ColumnDef<any[]>[] => {
+    const dataCols: ColumnDef<any[]>[] = columnNames.map(
+      (col: string, index: number) => ({
+        header: col,
+        accessorFn: (row: any[]) => row[index],
+        id: col + "_" + index,
+        cell: ({ row, getValue }: any) => {
+          const val = getValue();
+          if (!editEnabled) {
+            // Read-only rendering (no table selected or no PK)
+            if (val === null || val === undefined)
+              return (
+                <span className="text-muted-foreground/30 italic text-[11px]">
+                  NULL
+                </span>
+              );
+            if (typeof val === "boolean")
+              return (
+                <span className="text-blue-500 font-semibold text-[11px]">
+                  {val ? "TRUE" : "FALSE"}
+                </span>
+              );
+            return <span className="text-[12px]">{String(val)}</span>;
+          }
+
+          const rowKey = getRowKey(row.original);
+          if (!rowKey) {
+            // Can't compute row key — fallback to read-only
+            if (val === null || val === undefined)
+              return <span className="text-muted-foreground/30 italic text-[11px]">NULL</span>;
+            return <span className="text-[12px]">{String(val)}</span>;
+          }
+
+          const isPk = pkColumns.includes(col);
+          const isEditingThis =
+            editingCell?.rowKey === rowKey && editingCell?.column === col;
+          const dirtyChange = dirtyRows.get(rowKey)?.changes[col];
+          const displayValue = dirtyChange !== undefined ? dirtyChange.newValue : val;
+          const isDirty = dirtyChange !== undefined;
+
+          return (
+            <EditableCell
+              value={displayValue}
+              column={col}
+              dataType={columnDataTypes[col]}
+              isEditing={isEditingThis}
+              isDirty={isDirty}
+              isPrimaryKey={isPk}
+              onStartEdit={() => setEditingCell(rowKey, col)}
+              onCommit={(newValue) => {
+                const pks = extractPrimaryKeys(row.original, columnNames, pkColumns);
+                if (pks) {
+                  setCellValue(rowKey, pks, col, val, newValue);
+                }
+                clearEditingCell();
+              }}
+              onCancel={() => clearEditingCell()}
+            />
+          );
+        },
+      }),
+    );
+    return dataCols;
+  }, [
+    columnNames,
+    editEnabled,
+    pkColumns,
+    columnDataTypes,
+    editingCell,
+    dirtyRows,
+    getRowKey,
+    setEditingCell,
+    clearEditingCell,
+    setCellValue,
+  ]);
+
+  // ── TanStack Table ───────────────────────────────────────────────────────
+
+  const tableInstance = useReactTable({
     data: rawRows,
     columns: colDefs,
     getCoreRowModel: getCoreRowModel(),
+    state: { rowSelection },
+    onRowSelectionChange: setRowSelection,
+    enableRowSelection: editEnabled,
+    getRowId: (row, index) => getRowKey(row) ?? String(index),
   });
 
-  const { rows } = table.getRowModel();
+  const { rows } = tableInstance.getRowModel();
 
-  // ── TanStack Virtual ──────────────────────────────────────────────────────
-  // CORRECT pattern for tables: use padding rows, NOT position:absolute on <tr>.
-  // Absolute <tr> inside <tbody> breaks browser table layout and causes freeze.
+  // ── TanStack Virtual ─────────────────────────────────────────────────────
+
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => tableContainerRef.current,
@@ -222,18 +392,94 @@ function VirtualTable({ result }: { result: any }) {
   });
 
   const virtualRows = rowVirtualizer.getVirtualItems();
-
-  // Padding above and below the virtual window
   const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
   const paddingBottom =
     virtualRows.length > 0
       ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
       : 0;
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────────
+
+  const handleSave = useCallback(async () => {
+    const resp = await saveChanges(connID, schema, table);
+    if (resp.success) {
+      toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} saved`);
+    } else {
+      const code = resp.errors?.[0]?.code ?? "";
+      const msg = resp.errors?.[0]?.message ?? "Save failed";
+      if (code === "CONFLICT") {
+        toast.error("Conflict: row was modified by another session. Refresh and retry.");
+      } else if (code === "CONSTRAINT_VIOLATION") {
+        toast.error(`Constraint violation: ${msg}`);
+      } else {
+        toast.error(msg);
+      }
+    }
+  }, [saveChanges, connID, schema, table]);
+
+  const handleDeleteConfirmed = useCallback(async () => {
+    setDeleteConfirmOpen(false);
+    const resp = await deleteSelected(connID, schema, table);
+    if (resp.success) {
+      toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} deleted`);
+      setRowSelection({});
+    } else {
+      const code = resp.errors?.[0]?.code ?? "";
+      const msg = resp.errors?.[0]?.message ?? "Delete failed";
+      if (code === "CONSTRAINT_VIOLATION") {
+        toast.error(`Cannot delete: referenced by another table. ${msg}`);
+      } else {
+        toast.error(msg);
+      }
+    }
+  }, [deleteSelected, connID, schema, table]);
+
+  const handleToggleSelectAll = useCallback(() => {
+    if (isAllSelected) {
+      deselectAllRows();
+      setRowSelection({});
+    } else {
+      selectAllRows(allRowKeys);
+      const next: RowSelectionState = {};
+      for (const k of allRowKeys) next[k] = true;
+      setRowSelection(next);
+    }
+  }, [isAllSelected, allRowKeys, selectAllRows, deselectAllRows]);
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden">
-      {/* Scrollable container */}
+      {/* ── Selection toolbar (shown when rows are selected) ─────────────── */}
+      {editEnabled && selectedCount > 0 && (
+        <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-destructive/5 border-b border-destructive/20 text-[11px]">
+          <span className="text-destructive font-medium">
+            {selectedCount} row{selectedCount !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-[11px] text-muted-foreground"
+              onClick={() => { deselectAllRows(); setRowSelection({}); }}
+            >
+              Deselect all
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-6 px-2 text-[11px] gap-1"
+              disabled={isDeleting}
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
+              <HugeiconsIcon icon={Delete01Icon} size={12} />
+              {isDeleting ? "Deleting…" : `Delete ${selectedCount}`}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Scrollable table ──────────────────────────────────────────────── */}
       <div ref={tableContainerRef} className="flex-1 overflow-auto">
         <table
           className="border-separate border-spacing-0"
@@ -241,20 +487,44 @@ function VirtualTable({ result }: { result: any }) {
         >
           {/* Sticky header */}
           <thead className="sticky top-0 z-10">
-            {table.getHeaderGroups().map((headerGroup) => (
+            {tableInstance.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {/* Row number */}
                 <th className="w-10 px-2 py-1.5 text-[10px] font-mono text-muted-foreground/30 border-b border-r border-border/50 text-center bg-muted/60 backdrop-blur-sm select-none">
                   #
                 </th>
+                {/* Select-all checkbox */}
+                {editEnabled && (
+                  <th className="w-8 px-2 py-1.5 border-b border-r border-border/50 bg-muted/60 backdrop-blur-sm select-none">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all rows"
+                      checked={isAllSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = isIndeterminate;
+                      }}
+                      onChange={handleToggleSelectAll}
+                      className="cursor-pointer accent-primary"
+                    />
+                  </th>
+                )}
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="px-3 py-1.5 text-left text-[11px] font-semibold text-muted-foreground border-b border-r border-border/50 min-w-[120px] max-w-[320px] whitespace-nowrap select-none bg-muted/60 backdrop-blur-sm"
+                    className={cn(
+                      "px-3 py-1.5 text-left text-[11px] font-semibold text-muted-foreground border-b border-r border-border/50 min-w-[120px] max-w-[320px] whitespace-nowrap select-none bg-muted/60 backdrop-blur-sm",
+                      pkColumns.includes(header.column.id.replace(/_\d+$/, "")) &&
+                        "text-primary/70",
+                    )}
                   >
                     {flexRender(
                       header.column.columnDef.header,
                       header.getContext(),
+                    )}
+                    {pkColumns.includes(header.column.id.replace(/_\d+$/, "")) && (
+                      <span className="ml-1 text-[9px] text-primary/50 uppercase tracking-wide">
+                        pk
+                      </span>
                     )}
                   </th>
                 ))}
@@ -263,7 +533,6 @@ function VirtualTable({ result }: { result: any }) {
           </thead>
 
           <tbody>
-            {/* Top padding row — replaces absolute translateY */}
             {paddingTop > 0 && (
               <tr>
                 <td style={{ height: paddingTop }} />
@@ -272,38 +541,68 @@ function VirtualTable({ result }: { result: any }) {
 
             {virtualRows.map((virtualRow) => {
               const row = rows[virtualRow.index];
+              const rowKey = getRowKey(row.original);
+              const isSelected = rowKey ? selectedRowKeys.has(rowKey) : false;
+              const isRowDirty = rowKey ? dirtyRows.has(rowKey) : false;
+
               return (
                 <tr
                   key={row.id}
                   className={cn(
                     "hover:bg-muted/70 transition-colors",
-                    virtualRow.index % 2 !== 0
-                      ? "bg-muted/50"
-                      : "bg-transparent",
+                    isSelected && "bg-destructive/5",
+                    !isSelected && isRowDirty && "bg-yellow-500/5",
+                    !isSelected &&
+                      !isRowDirty &&
+                      virtualRow.index % 2 !== 0 &&
+                      "bg-muted/50",
                   )}
                 >
-                  {/* Row number cell */}
+                  {/* Row number */}
                   <td className="w-10 px-2 py-1 text-center text-[10px] font-mono text-muted-foreground/25 border-b border-r border-border/20 select-none bg-muted/5">
                     {virtualRow.index + 1}
                   </td>
+
+                  {/* Row checkbox */}
+                  {editEnabled && (
+                    <td className="w-8 px-2 py-1 border-b border-r border-border/20 bg-muted/5">
+                      {rowKey && (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select row ${virtualRow.index + 1}`}
+                          checked={isSelected}
+                          onChange={() => {
+                            toggleRowSelection(rowKey);
+                            setRowSelection((prev) => {
+                              const next = { ...prev };
+                              if (isSelected) delete next[rowKey];
+                              else next[rowKey] = true;
+                              return next;
+                            });
+                          }}
+                          className="cursor-pointer accent-primary"
+                        />
+                      )}
+                    </td>
+                  )}
+
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
-                      className="px-3 py-1 border-b border-r border-border/10 min-w-[120px] max-w-[320px]"
+                      className={cn(
+                        "px-3 py-1 border-b border-r border-border/10 min-w-[120px] max-w-[320px]",
+                      )}
                     >
-                      <div className="truncate font-mono">
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </div>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </td>
                   ))}
                 </tr>
               );
             })}
 
-            {/* Bottom padding row */}
             {paddingBottom > 0 && (
               <tr>
                 <td style={{ height: paddingBottom }} />
@@ -313,7 +612,7 @@ function VirtualTable({ result }: { result: any }) {
         </table>
       </div>
 
-      {/* Status bar */}
+      {/* ── Status bar ────────────────────────────────────────────────────── */}
       <div className="h-7 shrink-0 flex items-center justify-between px-3 border-t border-border/40 bg-muted/20 text-[10px] text-muted-foreground/70 font-medium tracking-wide select-none">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
@@ -333,6 +632,69 @@ function VirtualTable({ result }: { result: any }) {
           Virtualizing {virtualRows.length} / {rawRows.length} rows
         </span>
       </div>
+
+      {/* ── Dirty rows action bar (floating at bottom) ─────────────────────── */}
+      {editEnabled && hasDirty && (
+        <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-background border-t-2 border-primary/30 shadow-lg">
+          <span className="text-[11px] font-medium text-muted-foreground">
+            {dirtyRows.size} row{dirtyRows.size !== 1 ? "s" : ""} modified
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-3 text-[11px] gap-1.5 text-muted-foreground"
+              disabled={isSaving}
+              onClick={() => clearAllDirty()}
+            >
+              <HugeiconsIcon icon={Cancel01Icon} size={12} />
+              Discard
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 px-3 text-[11px] gap-1.5"
+              disabled={isSaving}
+              onClick={handleSave}
+            >
+              {isSaving ? (
+                <>
+                  <Spinner className="size-3" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <HugeiconsIcon icon={FloppyDiskIcon} size={12} />
+                  Save changes
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete confirmation dialog ─────────────────────────────────────── */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedCount} row{selectedCount !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the selected{" "}
+              {selectedCount === 1 ? "row" : `${selectedCount} rows`} from{" "}
+              <code className="font-mono text-foreground">{schema}.{table}</code>.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteConfirmed}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

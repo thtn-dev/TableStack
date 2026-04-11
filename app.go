@@ -13,6 +13,7 @@ import (
 	"github.com/thtn-dev/table_stack/internal/db"
 	_ "github.com/thtn-dev/table_stack/internal/db/mysql"
 	_ "github.com/thtn-dev/table_stack/internal/db/postgres"
+	"github.com/thtn-dev/table_stack/internal/mutation"
 	"github.com/thtn-dev/table_stack/internal/session"
 	"github.com/thtn-dev/table_stack/internal/store"
 
@@ -26,6 +27,7 @@ type App struct {
 	profiles       *store.ProfileStore
 	credentials    *store.CredentialManager
 	sessionManager *session.SessionManager
+	mutations      *mutation.MutationService
 	app            *application.App // set from main.go after app creation
 	sessDir        string           // path to sessions directory
 	mu             sync.RWMutex
@@ -36,6 +38,7 @@ type App struct {
 func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.ctx = ctx
 	a.manager = db.NewManager()
+	a.mutations = mutation.NewMutationService(a.manager)
 
 	profiles, err := store.NewProfileStore("dbclient")
 	if err != nil {
@@ -373,6 +376,19 @@ func (a *App) GetLastConnection() (string, error) {
 		return "", fmt.Errorf("get last connection: %w", err)
 	}
 	return strings.TrimSpace(string(data)), nil
+}
+
+// ---- Mutation bindings ----------------------------------------------------
+
+// UpdateRows updates one or more rows in the database within a single
+// transaction. If any row fails the entire operation is rolled back.
+func (a *App) UpdateRows(connID string, req mutation.UpdateBulkRequest) mutation.MutationResponse {
+	return a.mutations.ExecuteUpdate(connID, req)
+}
+
+// DeleteRows deletes the specified rows within a single transaction.
+func (a *App) DeleteRows(connID string, req mutation.DeleteRowsRequest) mutation.MutationResponse {
+	return a.mutations.ExecuteDelete(connID, req)
 }
 
 // ---- private helpers ------------------------------------------------------
