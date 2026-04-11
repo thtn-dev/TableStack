@@ -35,17 +35,17 @@
 | Task | Status | Notes | Date |
 |------|--------|-------|------|
 | 4.1 Bulk Cell Edit | ⬜ Not started | | |
-| 4.2 Keyboard Shortcuts | ⬜ Not started | Ctrl+S save, Ctrl+Z undo, Delete key, Escape deselect | |
+| 4.2 Keyboard Shortcuts | ✅ Done | `Ctrl+S` saves dirty rows (capture phase, overrides MainWindow file-save when grid has changes). `Ctrl+Z` undoes last cell edit via cellHistory. `Delete`/`Backspace` opens delete confirm when rows selected. `Escape` cancels editing or deselects. | 2026-04-11 |
 | 4.3 Visual Indicators | ✅ Done | Dirty cell → yellow bg. Selected row → red/destructive bg. Row dirty → yellow-tinted row. Saving spinner. | 2026-04-11 |
-| 4.4 Pagination + Dirty State | ⬜ Not started | | |
+| 4.4 Pagination + Dirty State | ✅ Done | QueryEditor warns via toast + clears dirty state before running a new query. VirtualTable auto-clears dirty/selection on mount (new result key). | 2026-04-11 |
 
 ## Phase 5 — Hardening
 
 | Task | Status | Notes | Date |
 |------|--------|-------|------|
-| 5.1 Frontend Validation | ⬜ Not started | PK columns are already read-only (isPrimaryKey guard in EditableCell). | |
-| 5.2 GetTableEditMetadata | ⬜ Not started | Currently uses existing DescribeTable/ColumnInfo. `isGenerated` field not yet available. | |
-| 5.3 Edge Cases | ⬜ Not started | Table-has-no-PK banner: edit disabled when `pkColumns.length === 0` (ResultPanel). | |
+| 5.1 Frontend Validation | ✅ Done | `isGenerated` prop → read-only cells with tooltip. Inline warning for invalid numeric input. NOT NULL hint when required field is cleared. `isPrimaryKey` guard was already in place. | 2026-04-11 |
+| 5.2 GetTableEditMetadata | ✅ Done | `IsGenerated bool` added to `ColumnInfo` in `internal/db/types.go`. Postgres detects `nextval()` defaults + `is_generated='ALWAYS'`. MySQL detects `auto_increment`, `VIRTUAL GENERATED`, `STORED GENERATED`. Frontend `ColumnInfo` type augmented with `isGenerated?: boolean`. | 2026-04-11 |
+| 5.3 Edge Cases | ✅ Done | No-PK banner shown in ResultPanel when `pkColumns.length === 0`. Batch >1000 rows: toast warning before save/delete. Unsupported types (json, jsonb, bytea, xml, arrays) → read-only display showing type name. Ctrl+Z undo history (`cellHistory` array in mutationStore). | 2026-04-11 |
 
 <!-- Status options: ⬜ Not started | 🔄 In progress | ✅ Done | ❌ Blocked -->
 
