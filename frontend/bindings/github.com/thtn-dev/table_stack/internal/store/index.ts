@@ -3,5 +3,6 @@
 
 export {
     ConnectionConfig,
-    Profile
+    Profile,
+    Tag
 } from "./models.js";
