@@ -1,5 +1,12 @@
 export { useDBStore } from "./useDBStore";
 export {
+  useEditorStore,
+  selectActiveTab,
+  selectHasDirtyTabs,
+  useAutoSave,
+} from "./useEditorStore";
+export type { CursorPos, QueryTab, WorkspaceSession } from "./editor-types";
+export {
   selectIsConnected,
   selectIsConnecting,
   selectCurrentColumns,

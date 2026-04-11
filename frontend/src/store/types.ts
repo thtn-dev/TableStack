@@ -7,7 +7,10 @@
 // Convenience plain-object aliases
 // ---------------------------------------------------------------------------
 
-import type { Profile as StoreProfile } from "../../bindings/github.com/thtn-dev/table_stack/internal/store/models";
+import type {
+  Profile as StoreProfile,
+  Tag as StoreTag,
+} from "../../bindings/github.com/thtn-dev/table_stack/internal/store/models";
 import type {
   ConnectResult as DBConnectResult,
   DatabaseInfo as DBDatabaseInfo,
@@ -19,6 +22,9 @@ import type {
 
 /** A connection profile as stored on disk (password masked after load). */
 export type Profile = StoreProfile;
+
+/** A tag with a name and hex color attached to a profile. */
+export type Tag = StoreTag;
 
 /** Result of a one-shot test connection. */
 export type ConnectResult = DBConnectResult;
