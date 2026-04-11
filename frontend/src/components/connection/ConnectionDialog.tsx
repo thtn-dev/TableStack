@@ -1,17 +1,8 @@
 import { useState, useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  DatabaseIcon,
-  CheckmarkCircle01Icon,
-  AlertCircleIcon,
-  FloppyDiskIcon,
-  TestTube01Icon,
-  EyeIcon,
-  EyeOff,
-} from "@hugeicons/core-free-icons";
+import { DatabaseIcon, FloppyDiskIcon, TestTube01Icon } from "@hugeicons/core-free-icons";
 
 import {
   Dialog,
@@ -22,165 +13,24 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 
 import { TestConnection } from "../../../bindings/github.com/thtn-dev/table_stack/app";
 import { useDBStore } from "@/store";
 import type { Profile } from "@/store";
-import { cn } from "@/lib/utils";
+
+import {
+  connectionSchema,
+  DEFAULT_FORM_VALUES,
+  profileToForm,
+  formToProfile,
+} from "./connectionFormSchema";
+import type { ConnectionFormValues } from "./connectionFormSchema";
+import { ConnectionFormFields, TestBanner } from "./ConnectionFormFields";
+import type { TestStatus } from "./ConnectionFormFields";
 
 // =============================================================================
-// Schema
-// =============================================================================
-
-const SSL_MODES = ["disable", "require", "verify-ca", "verify-full"] as const;
-const DRIVERS = ["postgres", "mysql"] as const;
-const DEFAULT_PORTS: Record<string, number> = {
-  postgres: 5432,
-  mysql: 3306,
-};
-
-const connectionSchema = z.object({
-  driver: z.enum(DRIVERS),
-  name: z.string().min(1, "Name is required"),
-  host: z.string().min(1, "Host is required"),
-  port: z.number({ error: "Port must be a number" }).int().min(1).max(65535),
-  user: z.string().min(1, "User is required"),
-  password: z.string(),
-  database: z.string().min(1, "Database is required"),
-  sslMode: z.enum(SSL_MODES),
-});
-
-type ConnectionFormValues = z.infer<typeof connectionSchema>;
-
-// =============================================================================
-// Default values
-// =============================================================================
-
-const DEFAULT_VALUES: ConnectionFormValues = {
-  driver: "postgres",
-  name: "",
-  host: "localhost",
-  port: 5432,
-  user: "postgres",
-  password: "",
-  database: "postgres",
-  sslMode: "disable",
-};
-
-function profileToForm(p: Profile): ConnectionFormValues {
-  return {
-    driver: (DRIVERS as readonly string[]).includes(p.driver)
-      ? (p.driver as ConnectionFormValues["driver"])
-      : "postgres",
-    name: p.name,
-    host: p.host,
-    port: p.port,
-    user: p.user,
-    password: p.password,
-    database: p.database,
-    sslMode: (SSL_MODES as readonly string[]).includes(p.sslMode)
-      ? (p.sslMode as ConnectionFormValues["sslMode"])
-      : "disable",
-  };
-}
-
-// =============================================================================
-// Test result banner
-// =============================================================================
-
-type TestStatus = "idle" | "testing" | "success" | "error";
-
-interface TestBannerProps {
-  status: TestStatus;
-  message: string;
-}
-
-function TestBanner({ status, message }: TestBannerProps) {
-  if (status === "idle") return null;
-
-  if (status === "testing") {
-    return (
-      <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-        <Spinner className="size-3.5" />
-        <span>Testing connection…</span>
-      </div>
-    );
-  }
-
-  if (status === "success") {
-    return (
-      <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">
-        <HugeiconsIcon
-          icon={CheckmarkCircle01Icon}
-          size={14}
-          className="mt-px shrink-0"
-        />
-        <span>{message}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive dark:text-destructive">
-      <HugeiconsIcon
-        icon={AlertCircleIcon}
-        size={14}
-        className="mt-px shrink-0"
-      />
-      <span>{message}</span>
-    </div>
-  );
-}
-
-// =============================================================================
-// Field helpers
-// =============================================================================
-
-interface FieldProps {
-  label: string;
-  htmlFor: string;
-  error?: string;
-  required?: boolean;
-  children: React.ReactNode;
-  className?: string;
-}
-
-function Field({
-  label,
-  htmlFor,
-  error,
-  required,
-  children,
-  className,
-}: FieldProps) {
-  return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <Label htmlFor={htmlFor}>
-        {label}
-        {required && <span className="ml-0.5 text-destructive">*</span>}
-      </Label>
-      {children}
-      {error && (
-        <p className="text-[11px] text-destructive" role="alert">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
-// =============================================================================
-// Main component
+// ConnectionDialog
 // =============================================================================
 
 export interface ConnectionDialogProps {
@@ -190,11 +40,7 @@ export interface ConnectionDialogProps {
   editProfile?: Profile;
 }
 
-export function ConnectionDialog({
-  open,
-  onOpenChange,
-  editProfile,
-}: ConnectionDialogProps) {
+export function ConnectionDialog({ open, onOpenChange, editProfile }: ConnectionDialogProps) {
   const saveProfile = useDBStore((s) => s.saveProfile);
 
   const [testStatus, setTestStatus] = useState<TestStatus>("idle");
@@ -204,65 +50,41 @@ export function ConnectionDialog({
 
   const isEditMode = Boolean(editProfile?.id);
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    reset,
-    getValues,
-    setValue,
-    formState: { errors, isDirty },
-  } = useForm<ConnectionFormValues>({
-    resolver: zodResolver(connectionSchema),
-    defaultValues: editProfile ? profileToForm(editProfile) : DEFAULT_VALUES,
-  });
+  const { register, handleSubmit, control, reset, getValues, setValue, watch, formState: { errors } } =
+    useForm<ConnectionFormValues>({
+      resolver: zodResolver(connectionSchema),
+      defaultValues: editProfile ? profileToForm(editProfile) : DEFAULT_FORM_VALUES,
+    });
 
-  // Reset form when dialog opens/closes or profile changes
+  const tagColor = watch("tag.color");
+
+  // Reset when dialog opens / profile changes
   useEffect(() => {
     if (open) {
-      reset(editProfile ? profileToForm(editProfile) : DEFAULT_VALUES);
+      reset(editProfile ? profileToForm(editProfile) : DEFAULT_FORM_VALUES);
       setTestStatus("idle");
       setTestMessage("");
     }
   }, [open, editProfile, reset]);
 
-  // Auto-update port when driver changes
+  // Auto-update port when driver changes (new profiles only)
+  const watchedDriver = watch("driver");
   useEffect(() => {
-    const currentDriver = getValues("driver");
-    const currentPort = getValues("port");
-    const defaultPort = DEFAULT_PORTS[currentDriver] ?? 5432;
-    if (defaultPort !== currentPort && !editProfile) {
-      setValue("port", defaultPort);
+    if (!editProfile) {
+      const ports: Record<string, number> = { postgres: 5432, mysql: 3306 };
+      setValue("port", ports[watchedDriver] ?? 5432);
     }
-  }, [getValues, setValue, editProfile]);
-
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  }, [watchedDriver, editProfile, setValue]);
 
   const handleTest = async () => {
     const values = getValues();
     setTestStatus("testing");
     setTestMessage("");
-
     try {
-      const result = await TestConnection({
-        id: editProfile?.id ?? "",
-        driver: values.driver,
-        name: values.name,
-        host: values.host,
-        port: values.port,
-        user: values.user,
-        password: values.password,
-        database: values.database,
-        sslMode: values.sslMode,
-      });
-
+      const result = await TestConnection(formToProfile(values, editProfile?.id ?? ""));
       if (result.success) {
         setTestStatus("success");
-        setTestMessage(
-          result.version
-            ? `Connected · ${result.version}`
-            : result.message || "Connection successful",
-        );
+        setTestMessage(result.version ? `Connected · ${result.version}` : result.message || "Connection successful");
       } else {
         setTestStatus("error");
         setTestMessage(result.message || "Connection failed");
@@ -276,17 +98,7 @@ export function ConnectionDialog({
   const onSubmit = async (values: ConnectionFormValues) => {
     setIsSaving(true);
     try {
-      await saveProfile({
-        id: editProfile?.id ?? "",
-        driver: values.driver,
-        name: values.name,
-        host: values.host,
-        port: values.port,
-        user: values.user,
-        password: values.password,
-        database: values.database,
-        sslMode: values.sslMode,
-      });
+      await saveProfile(formToProfile(values, editProfile?.id ?? ""));
       onOpenChange(false);
     } catch (err) {
       setTestStatus("error");
@@ -296,29 +108,22 @@ export function ConnectionDialog({
     }
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md gap-0 p-0 overflow-hidden">
         {/* Header */}
         <DialogHeader className="px-4 pt-4 pb-3 border-b border-border/60">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
-              <HugeiconsIcon
-                icon={DatabaseIcon}
-                size={15}
-                className="text-primary"
-              />
+            <div
+              className="flex h-7 w-7 items-center justify-center rounded-md transition-colors duration-200"
+              style={{ backgroundColor: `${tagColor}20` }}
+            >
+              <HugeiconsIcon icon={DatabaseIcon} size={15} style={{ color: tagColor }} />
             </div>
             <div>
-              <DialogTitle>
-                {isEditMode ? "Edit Connection" : "New Connection"}
-              </DialogTitle>
+              <DialogTitle>{isEditMode ? "Edit Connection" : "New Connection"}</DialogTitle>
               <DialogDescription className="mt-0.5">
-                {isEditMode
-                  ? "Update your connection settings."
-                  : "Configure a new database connection."}
+                {isEditMode ? "Update your connection settings." : "Configure a new database connection."}
               </DialogDescription>
             </div>
           </div>
@@ -327,191 +132,20 @@ export function ConnectionDialog({
         {/* Form body */}
         <form id="connection-form" onSubmit={handleSubmit(onSubmit)} noValidate>
           <div className="flex flex-col gap-3 px-4 py-4">
-            <Field
-              label="Connection Name"
-              htmlFor="conn-name"
-              error={errors.name?.message}
-              required
-            >
-              <Input
-                id="conn-name"
-                placeholder="My PostgreSQL"
-                autoFocus
-                aria-invalid={Boolean(errors.name)}
-                {...register("name")}
-              />
-            </Field>
-
-            {/* Driver */}
-            <Field
-              label="Database Type"
-              htmlFor="conn-driver"
-              error={errors.driver?.message}
-              required
-            >
-              <Controller
-                name="driver"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger
-                      id="conn-driver"
-                      className="w-full"
-                      aria-invalid={Boolean(errors.driver)}
-                    >
-                      <SelectValue placeholder="Select…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DRIVERS.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d === "postgres" ? "PostgreSQL" : d === "mysql" ? "MySQL" : d}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </Field>
-
-            {/* Host + Port */}
-            <div className="grid grid-cols-[1fr_90px] gap-2">
-              <Field
-                label="Host"
-                htmlFor="conn-host"
-                error={errors.host?.message}
-                required
-              >
-                <Input
-                  id="conn-host"
-                  placeholder="localhost"
-                  aria-invalid={Boolean(errors.host)}
-                  {...register("host")}
-                />
-              </Field>
-
-              <Field
-                label="Port"
-                htmlFor="conn-port"
-                error={errors.port?.message}
-                required
-              >
-                <Input
-                  id="conn-port"
-                  type="number"
-                  placeholder="5432"
-                  aria-invalid={Boolean(errors.port)}
-                  {...register("port", { valueAsNumber: true })}
-                />
-              </Field>
-            </div>
-
-            {/* User + Password */}
-            <div className="grid grid-cols-2 gap-2">
-              <Field
-                label="User"
-                htmlFor="conn-user"
-                error={errors.user?.message}
-                required
-              >
-                <Input
-                  id="conn-user"
-                  placeholder="root"
-                  autoComplete="username"
-                  aria-invalid={Boolean(errors.user)}
-                  {...register("user")}
-                />
-              </Field>
-
-              <Field
-                label="Password"
-                htmlFor="conn-password"
-                error={errors.password?.message}
-              >
-                <div className="relative">
-                  <Input
-                    id="conn-password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    className="pr-8"
-                    aria-invalid={Boolean(errors.password)}
-                    {...register("password")}
-                  />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    aria-label={
-                      showPassword ? "Hide password" : "Show password"
-                    }
-                    onClick={() => setShowPassword((v) => !v)}
-                    className={cn(
-                      "absolute right-2 top-1/2 -translate-y-1/2",
-                      "text-muted-foreground hover:text-foreground transition-colors",
-                    )}
-                  >
-                    <HugeiconsIcon
-                      icon={showPassword ? EyeOff : EyeIcon}
-                      size={13}
-                    />
-                  </button>
-                </div>
-              </Field>
-            </div>
-
-            {/* Database + SSL */}
-            <div className="grid grid-cols-2 gap-2">
-              <Field
-                label="Database"
-                htmlFor="conn-db"
-                error={errors.database?.message}
-                required
-              >
-                <Input
-                  id="conn-db"
-                  placeholder="mydb"
-                  aria-invalid={Boolean(errors.database)}
-                  {...register("database")}
-                />
-              </Field>
-
-              <Field
-                label="SSL Mode"
-                htmlFor="conn-ssl"
-                error={errors.sslMode?.message}
-              >
-                <Controller
-                  name="sslMode"
-                  control={control}
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger
-                        id="conn-ssl"
-                        className="w-full"
-                        aria-invalid={Boolean(errors.sslMode)}
-                      >
-                        <SelectValue placeholder="Select…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SSL_MODES.map((mode) => (
-                          <SelectItem key={mode} value={mode}>
-                            {mode}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              </Field>
-            </div>
-
-            {/* Test result banner */}
+            <ConnectionFormFields
+              register={register}
+              control={control}
+              errors={errors}
+              showPassword={showPassword}
+              onTogglePassword={() => setShowPassword((v) => !v)}
+              idPrefix="dlg"
+            />
             <TestBanner status={testStatus} message={testMessage} />
           </div>
         </form>
 
         {/* Footer */}
         <DialogFooter className="px-4 pb-4 pt-0 flex flex-row items-center gap-2 sm:justify-between">
-          {/* Test button — left-aligned */}
           <Button
             type="button"
             variant="outline"
@@ -520,15 +154,10 @@ export function ConnectionDialog({
             className="gap-1.5"
             id="btn-test-connection"
           >
-            {testStatus === "testing" ? (
-              <Spinner className="size-3.5" />
-            ) : (
-              <HugeiconsIcon icon={TestTube01Icon} size={14} />
-            )}
+            {testStatus === "testing" ? <Spinner className="size-3.5" /> : <HugeiconsIcon icon={TestTube01Icon} size={14} />}
             Test Connection
           </Button>
 
-          {/* Save button — right-aligned */}
           <Button
             type="submit"
             form="connection-form"
@@ -536,11 +165,7 @@ export function ConnectionDialog({
             className="gap-1.5"
             id="btn-save-connection"
           >
-            {isSaving ? (
-              <Spinner className="size-3.5" />
-            ) : (
-              <HugeiconsIcon icon={FloppyDiskIcon} size={14} />
-            )}
+            {isSaving ? <Spinner className="size-3.5" /> : <HugeiconsIcon icon={FloppyDiskIcon} size={14} />}
             {isEditMode ? "Update" : "Save"}
           </Button>
         </DialogFooter>
