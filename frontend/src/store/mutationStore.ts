@@ -23,6 +23,12 @@ import { buildRowKey } from "@/types/mutation";
 // State shape
 // =============================================================================
 
+/** One entry in the cell-edit undo history. */
+interface CellHistoryEntry {
+  rowKey: string;
+  column: string;
+}
+
 interface MutationState {
   /** Rows with uncommitted changes. Key = buildRowKey(primaryKeys). */
   dirtyRows: Map<string, DirtyRow>;
@@ -44,6 +50,9 @@ interface MutationState {
 
   /** Last successful mutation response (for toast/status display). */
   lastResponse: MutationResponse | null;
+
+  /** Ordered history of cell edits — used by undoLastCellEdit. */
+  cellHistory: CellHistoryEntry[];
 }
 
 // =============================================================================
@@ -113,6 +122,12 @@ interface MutationActions {
 
   /** Clear last error and response messages. */
   clearStatus: () => void;
+
+  /**
+   * Undo the last cell edit: reverts the most recently edited cell back to its
+   * pre-edit value and removes it from dirty state.
+   */
+  undoLastCellEdit: () => void;
 }
 
 // =============================================================================
@@ -131,28 +146,36 @@ export const useMutationStore = create<MutationState & MutationActions>()(
       isDeleting: false,
       lastError: null,
       lastResponse: null,
+      cellHistory: [],
 
       // ── Cell editing ───────────────────────────────────────────────────────
 
       setCellValue: (rowKey, primaryKeys, column, oldValue, newValue) => {
         set((s) => {
+          const isFirstEdit = !s.dirtyRows.has(rowKey) || s.dirtyRows.get(rowKey)!.changes[column] === undefined;
           if (!s.dirtyRows.has(rowKey)) {
             s.dirtyRows.set(rowKey, { primaryKeys, changes: {} });
           }
           const row = s.dirtyRows.get(rowKey)!;
           row.changes[column] = { oldValue, newValue };
+          // Only record the first edit of each cell in history to preserve original value
+          if (isFirstEdit) {
+            s.cellHistory.push({ rowKey, column });
+          }
         });
       },
 
       clearDirtyRow: (rowKey) => {
         set((s) => {
           s.dirtyRows.delete(rowKey);
+          s.cellHistory = s.cellHistory.filter((e) => e.rowKey !== rowKey);
         });
       },
 
       clearAllDirty: () => {
         set((s) => {
           s.dirtyRows.clear();
+          s.cellHistory = [];
         });
       },
 
@@ -226,6 +249,7 @@ export const useMutationStore = create<MutationState & MutationActions>()(
           if (response.success) {
             set((s) => {
               s.dirtyRows.clear();
+              s.cellHistory = [];
               s.lastResponse = response;
               s.isSaving = false;
             });
@@ -277,6 +301,7 @@ export const useMutationStore = create<MutationState & MutationActions>()(
               for (const key of selectedKeys) {
                 s.dirtyRows.delete(key);
               }
+              s.cellHistory = s.cellHistory.filter((e) => !selectedKeys.has(e.rowKey));
               s.selectedRowKeys.clear();
               s.lastResponse = response;
               s.isDeleting = false;
@@ -305,6 +330,21 @@ export const useMutationStore = create<MutationState & MutationActions>()(
         set((s) => {
           s.lastError = null;
           s.lastResponse = null;
+        });
+      },
+
+      undoLastCellEdit: () => {
+        set((s) => {
+          if (s.cellHistory.length === 0) return;
+          const last = s.cellHistory[s.cellHistory.length - 1];
+          const row = s.dirtyRows.get(last.rowKey);
+          if (row) {
+            delete row.changes[last.column];
+            if (Object.keys(row.changes).length === 0) {
+              s.dirtyRows.delete(last.rowKey);
+            }
+          }
+          s.cellHistory.pop();
         });
       },
     })),

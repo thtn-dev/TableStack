@@ -3,6 +3,7 @@ import {
   useMemo,
   useCallback,
   useState,
+  useEffect,
 } from "react";
 import {
   useReactTable,
@@ -22,6 +23,7 @@ import {
   Delete01Icon,
   FloppyDiskIcon,
   Cancel01Icon,
+  InformationCircleIcon,
 } from "@hugeicons/core-free-icons";
 
 import { useDBStore, toTableCacheKey } from "@/store";
@@ -55,7 +57,7 @@ export function ResultPanel() {
 
   const { data, status, error } = resultState;
 
-  // Derive PK columns from column cache when a table is selected
+  // Derive PK + metadata columns from column cache when a table is selected
   const pkColumns = useMemo(() => {
     if (!selectedTable) return [];
     const key = toTableCacheKey(selectedTable);
@@ -68,6 +70,20 @@ export function ResultPanel() {
     const key = toTableCacheKey(selectedTable);
     const cols = columnCache[key]?.data ?? [];
     return Object.fromEntries(cols.map((c) => [c.name, c.dataType]));
+  }, [selectedTable, columnCache]);
+
+  const columnIsGenerated = useMemo(() => {
+    if (!selectedTable) return {} as Record<string, boolean>;
+    const key = toTableCacheKey(selectedTable);
+    const cols = columnCache[key]?.data ?? [];
+    return Object.fromEntries(cols.map((c) => [c.name, c.isGenerated ?? false]));
+  }, [selectedTable, columnCache]);
+
+  const columnIsNullable = useMemo(() => {
+    if (!selectedTable) return {} as Record<string, boolean>;
+    const key = toTableCacheKey(selectedTable);
+    const cols = columnCache[key]?.data ?? [];
+    return Object.fromEntries(cols.map((c) => [c.name, c.isNullable]));
   }, [selectedTable, columnCache]);
 
   // ── Render States ────────────────────────────────────────────────────────
@@ -201,16 +217,30 @@ export function ResultPanel() {
     !!activeProfileId;
 
   return (
-    <VirtualTable
-      key={data.duration}
-      result={data}
-      pkColumns={pkColumns}
-      columnDataTypes={columnDataTypes}
-      editEnabled={editEnabled}
-      connID={activeProfileId ?? ""}
-      schema={selectedTable?.schema ?? ""}
-      table={selectedTable?.table ?? ""}
-    />
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* ── No-PK banner ─────────────────────────────────────────────────── */}
+      {selectedTable && pkColumns.length === 0 && (
+        <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-500 select-none">
+          <HugeiconsIcon icon={InformationCircleIcon} size={13} />
+          <span>
+            No primary key detected on <strong>{selectedTable.table}</strong> — editing is disabled.
+          </span>
+        </div>
+      )}
+
+      <VirtualTable
+        key={data.duration}
+        result={data}
+        pkColumns={pkColumns}
+        columnDataTypes={columnDataTypes}
+        columnIsGenerated={columnIsGenerated}
+        columnIsNullable={columnIsNullable}
+        editEnabled={editEnabled}
+        connID={activeProfileId ?? ""}
+        schema={selectedTable?.schema ?? ""}
+        table={selectedTable?.table ?? ""}
+      />
+    </div>
   );
 }
 
@@ -222,6 +252,8 @@ interface VirtualTableProps {
   result: any;
   pkColumns: string[];
   columnDataTypes: Record<string, string>;
+  columnIsGenerated: Record<string, boolean>;
+  columnIsNullable: Record<string, boolean>;
   editEnabled: boolean;
   connID: string;
   schema: string;
@@ -232,6 +264,8 @@ function VirtualTable({
   result,
   pkColumns,
   columnDataTypes,
+  columnIsGenerated,
+  columnIsNullable,
   editEnabled,
   connID,
   schema,
@@ -252,18 +286,29 @@ function VirtualTable({
     selectedRowKeys,
     setCellValue,
     clearAllDirty,
-    setEditingCell,
     clearEditingCell,
+    setEditingCell,
     toggleRowSelection,
     selectAllRows,
     deselectAllRows,
     saveChanges,
     deleteSelected,
-    hasDirtyRows,
+    undoLastCellEdit,
   } = useMutationStore();
 
   const hasDirty = useMutationStore(selectHasDirty);
   const selectedCount = useMutationStore(selectSelectedCount);
+
+  // ── Clear dirty state when new query result arrives ─────────────────────
+  // This fires when the VirtualTable remounts (key=data.duration changes),
+  // ensuring stale row keys from previous queries don't linger.
+  useEffect(() => {
+    clearAllDirty();
+    deselectAllRows();
+    setRowSelection({});
+  // We intentionally only run this on mount (new result key)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Build a row key for a raw data row
   const getRowKey = useCallback(
@@ -289,6 +334,120 @@ function VirtualTable({
     allRowKeys.length > 0 && allRowKeys.every((k) => selectedRowKeys.has(k));
   const isIndeterminate =
     !isAllSelected && allRowKeys.some((k) => selectedRowKeys.has(k));
+
+  // ── Save + Delete handlers ───────────────────────────────────────────────
+
+  const handleSave = useCallback(async () => {
+    if (dirtyRows.size > 1000) {
+      toast.warning(`Saving ${dirtyRows.size} rows. This may take a moment…`);
+    }
+    const resp = await saveChanges(connID, schema, table);
+    if (resp.success) {
+      toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} saved`);
+    } else {
+      const code = resp.errors?.[0]?.code ?? "";
+      const msg = resp.errors?.[0]?.message ?? "Save failed";
+      if (code === "CONFLICT") {
+        toast.error("Conflict: row was modified by another session. Refresh and retry.");
+      } else if (code === "CONSTRAINT_VIOLATION") {
+        toast.error(`Constraint violation: ${msg}`);
+      } else {
+        toast.error(msg);
+      }
+    }
+  }, [saveChanges, connID, schema, table, dirtyRows.size]);
+
+  const handleDeleteConfirmed = useCallback(async () => {
+    setDeleteConfirmOpen(false);
+    if (selectedCount > 1000) {
+      toast.warning(`Deleting ${selectedCount} rows. This may take a moment…`);
+    }
+    const resp = await deleteSelected(connID, schema, table);
+    if (resp.success) {
+      toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} deleted`);
+      setRowSelection({});
+    } else {
+      const code = resp.errors?.[0]?.code ?? "";
+      const msg = resp.errors?.[0]?.message ?? "Delete failed";
+      if (code === "CONSTRAINT_VIOLATION") {
+        toast.error(`Cannot delete: referenced by another table. ${msg}`);
+      } else {
+        toast.error(msg);
+      }
+    }
+  }, [deleteSelected, connID, schema, table, selectedCount]);
+
+  const handleToggleSelectAll = useCallback(() => {
+    if (isAllSelected) {
+      deselectAllRows();
+      setRowSelection({});
+    } else {
+      selectAllRows(allRowKeys);
+      const next: RowSelectionState = {};
+      for (const k of allRowKeys) next[k] = true;
+      setRowSelection(next);
+    }
+  }, [isAllSelected, allRowKeys, selectAllRows, deselectAllRows]);
+
+  // ── Keyboard shortcuts ───────────────────────────────────────────────────
+  // Uses capture phase so Ctrl+S fires before MainWindow's file-save handler
+  // when the result grid has unsaved dirty rows.
+  useEffect(() => {
+    if (!editEnabled) return;
+
+    function handleKeyDown(e: KeyboardEvent) {
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      // Ctrl+S — save grid changes (intercept before MainWindow file-save)
+      if (ctrl && e.key === "s" && !e.shiftKey) {
+        const { dirtyRows: dr } = useMutationStore.getState();
+        if (dr.size > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          void handleSave();
+        }
+        return;
+      }
+
+      // Ctrl+Z — undo last cell edit
+      if (ctrl && e.key === "z") {
+        const { cellHistory } = useMutationStore.getState();
+        if (cellHistory.length > 0) {
+          e.preventDefault();
+          undoLastCellEdit();
+          return;
+        }
+      }
+
+      // Delete / Backspace — delete selected rows
+      if ((e.key === "Delete" || e.key === "Backspace") && !ctrl) {
+        const { selectedRowKeys: sel } = useMutationStore.getState();
+        // Only trigger if a cell is not being edited
+        const { editingCell: ec } = useMutationStore.getState();
+        if (sel.size > 0 && !ec) {
+          e.preventDefault();
+          setDeleteConfirmOpen(true);
+          return;
+        }
+      }
+
+      // Escape — cancel editing or deselect all
+      if (e.key === "Escape") {
+        const { editingCell: ec, selectedRowKeys: sel } = useMutationStore.getState();
+        if (ec) {
+          clearEditingCell();
+          return;
+        }
+        if (sel.size > 0) {
+          deselectAllRows();
+          setRowSelection({});
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
+  }, [editEnabled, handleSave, undoLastCellEdit, clearEditingCell, deselectAllRows]);
 
   // ── Column definitions ───────────────────────────────────────────────────
 
@@ -340,6 +499,8 @@ function VirtualTable({
               isEditing={isEditingThis}
               isDirty={isDirty}
               isPrimaryKey={isPk}
+              isGenerated={columnIsGenerated[col] ?? false}
+              isNullable={columnIsNullable[col] ?? true}
               onStartEdit={() => setEditingCell(rowKey, col)}
               onCommit={(newValue) => {
                 const pks = extractPrimaryKeys(row.original, columnNames, pkColumns);
@@ -360,6 +521,8 @@ function VirtualTable({
     editEnabled,
     pkColumns,
     columnDataTypes,
+    columnIsGenerated,
+    columnIsNullable,
     editingCell,
     dirtyRows,
     getRowKey,
@@ -397,54 +560,6 @@ function VirtualTable({
     virtualRows.length > 0
       ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
       : 0;
-
-  // ── Handlers ─────────────────────────────────────────────────────────────
-
-  const handleSave = useCallback(async () => {
-    const resp = await saveChanges(connID, schema, table);
-    if (resp.success) {
-      toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} saved`);
-    } else {
-      const code = resp.errors?.[0]?.code ?? "";
-      const msg = resp.errors?.[0]?.message ?? "Save failed";
-      if (code === "CONFLICT") {
-        toast.error("Conflict: row was modified by another session. Refresh and retry.");
-      } else if (code === "CONSTRAINT_VIOLATION") {
-        toast.error(`Constraint violation: ${msg}`);
-      } else {
-        toast.error(msg);
-      }
-    }
-  }, [saveChanges, connID, schema, table]);
-
-  const handleDeleteConfirmed = useCallback(async () => {
-    setDeleteConfirmOpen(false);
-    const resp = await deleteSelected(connID, schema, table);
-    if (resp.success) {
-      toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} deleted`);
-      setRowSelection({});
-    } else {
-      const code = resp.errors?.[0]?.code ?? "";
-      const msg = resp.errors?.[0]?.message ?? "Delete failed";
-      if (code === "CONSTRAINT_VIOLATION") {
-        toast.error(`Cannot delete: referenced by another table. ${msg}`);
-      } else {
-        toast.error(msg);
-      }
-    }
-  }, [deleteSelected, connID, schema, table]);
-
-  const handleToggleSelectAll = useCallback(() => {
-    if (isAllSelected) {
-      deselectAllRows();
-      setRowSelection({});
-    } else {
-      selectAllRows(allRowKeys);
-      const next: RowSelectionState = {};
-      for (const k of allRowKeys) next[k] = true;
-      setRowSelection(next);
-    }
-  }, [isAllSelected, allRowKeys, selectAllRows, deselectAllRows]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -628,9 +743,16 @@ function VirtualTable({
             <span>ms</span>
           </span>
         </div>
-        <span className="opacity-40 italic lowercase text-[10px]">
-          Virtualizing {virtualRows.length} / {rawRows.length} rows
-        </span>
+        <div className="flex items-center gap-3">
+          {editEnabled && (
+            <span className="opacity-30 text-[10px]">
+              Double-click to edit · Ctrl+S save · Ctrl+Z undo
+            </span>
+          )}
+          <span className="opacity-40 italic lowercase text-[10px]">
+            {virtualRows.length} / {rawRows.length} rows visible
+          </span>
+        </div>
       </div>
 
       {/* ── Dirty rows action bar (floating at bottom) ─────────────────────── */}

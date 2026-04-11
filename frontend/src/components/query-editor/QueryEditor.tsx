@@ -16,10 +16,12 @@ import {
 } from "@hugeicons/core-free-icons";
 
 import { useDBStore } from "@/store";
+import { useMutationStore } from "@/store/mutationStore";
 import { useThemeStore } from "@/hooks/useTheme";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
+import { toast } from "sonner";
 import {
   Tooltip,
   TooltipContent,
@@ -145,6 +147,13 @@ export function QueryEditor({
   // ── Run handler ───────────────────────────────────────────────────────────
   const handleRun = useCallback(async () => {
     if (!activeProfileId || !content.trim() || queryStatus === "loading") return;
+    // Warn if the user has unsaved grid edits — running a new query will clear them
+    const { dirtyRows, clearAllDirty, deselectAllRows } = useMutationStore.getState();
+    if (dirtyRows.size > 0) {
+      toast.warning("Unsaved grid changes discarded — running new query.");
+      clearAllDirty();
+      deselectAllRows();
+    }
     await executeQuery(activeProfileId, content);
   }, [activeProfileId, content, queryStatus, executeQuery]);
 

@@ -112,10 +112,13 @@ func (d *Driver) DescribeTable(conn *sql.DB, schema, table string) ([]db.ColumnI
 		SELECT
 			c.COLUMN_NAME,
 			c.DATA_TYPE,
-			c.IS_NULLABLE = 'YES'          AS is_nullable,
-			COALESCE(c.COLUMN_DEFAULT, '')  AS column_default,
+			c.IS_NULLABLE = 'YES'                                      AS is_nullable,
+			COALESCE(c.COLUMN_DEFAULT, '')                              AS column_default,
 			c.ORDINAL_POSITION,
-			c.COLUMN_KEY = 'PRI'            AS is_primary_key
+			c.COLUMN_KEY = 'PRI'                                       AS is_primary_key,
+			(c.EXTRA LIKE '%auto_increment%'
+			 OR c.EXTRA LIKE '%VIRTUAL GENERATED%'
+			 OR c.EXTRA LIKE '%STORED GENERATED%')                     AS is_generated
 		FROM information_schema.columns c
 		WHERE c.TABLE_SCHEMA = ?
 		  AND c.TABLE_NAME   = ?
@@ -131,7 +134,7 @@ func (d *Driver) DescribeTable(conn *sql.DB, schema, table string) ([]db.ColumnI
 		var c db.ColumnInfo
 		if err := rows.Scan(
 			&c.Name, &c.DataType, &c.IsNullable,
-			&c.DefaultValue, &c.Position, &c.IsPrimaryKey,
+			&c.DefaultValue, &c.Position, &c.IsPrimaryKey, &c.IsGenerated,
 		); err != nil {
 			return nil, err
 		}

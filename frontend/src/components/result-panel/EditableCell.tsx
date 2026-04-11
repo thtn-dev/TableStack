@@ -18,6 +18,10 @@ interface EditableCellProps {
   isDirty: boolean;
   /** True when the column is a primary key (read-only, no double-click). */
   isPrimaryKey: boolean;
+  /** True when the column is auto-generated / serial (read-only). */
+  isGenerated?: boolean;
+  /** True when the column does NOT allow NULL values. */
+  isNullable?: boolean;
   /** Called when the user wants to start editing this cell. */
   onStartEdit: () => void;
   /** Called with the new value when the user confirms an edit. */
@@ -25,6 +29,10 @@ interface EditableCellProps {
   /** Called when the user cancels an edit (Escape). */
   onCancel: () => void;
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function formatDisplay(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -35,7 +43,14 @@ function formatDisplay(value: unknown): string {
 function parseValueForType(raw: string, dataType?: string): unknown {
   if (raw === "") return null;
   const dt = (dataType ?? "").toLowerCase();
-  if (dt.includes("int") || dt.includes("numeric") || dt.includes("float") || dt.includes("double") || dt.includes("decimal") || dt.includes("real")) {
+  if (
+    dt.includes("int") ||
+    dt.includes("numeric") ||
+    dt.includes("float") ||
+    dt.includes("double") ||
+    dt.includes("decimal") ||
+    dt.includes("real")
+  ) {
     const n = Number(raw);
     return isNaN(n) ? raw : n;
   }
@@ -47,6 +62,47 @@ function parseValueForType(raw: string, dataType?: string): unknown {
   return raw;
 }
 
+/**
+ * Returns true for column types that are complex/binary and should not be
+ * edited inline (json, jsonb, bytea, arrays, hstore, xml, etc.)
+ */
+function isUnsupportedType(dataType?: string): boolean {
+  if (!dataType) return false;
+  const dt = dataType.toLowerCase();
+  return (
+    dt.includes("json") ||
+    dt === "bytea" ||
+    dt === "xml" ||
+    dt === "hstore" ||
+    dt === "array" ||
+    dt.startsWith("_") // PostgreSQL array type names start with _
+  );
+}
+
+/**
+ * Returns true when the raw string looks like a valid number for numeric
+ * column types. Used to show an inline warning without blocking the commit.
+ */
+function isInvalidForType(raw: string, dataType?: string): boolean {
+  if (raw === "") return false; // empty → NULL, always valid
+  const dt = (dataType ?? "").toLowerCase();
+  if (
+    dt.includes("int") ||
+    dt.includes("numeric") ||
+    dt.includes("float") ||
+    dt.includes("double") ||
+    dt.includes("decimal") ||
+    dt.includes("real")
+  ) {
+    return isNaN(Number(raw));
+  }
+  return false;
+}
+
+// =============================================================================
+// Component
+// =============================================================================
+
 export function EditableCell({
   value,
   column,
@@ -54,12 +110,16 @@ export function EditableCell({
   isEditing,
   isDirty,
   isPrimaryKey,
+  isGenerated = false,
+  isNullable = true,
   onStartEdit,
   onCommit,
   onCancel,
 }: EditableCellProps) {
   const [draft, setDraft] = useState(formatDisplay(value));
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const readOnly = isPrimaryKey || isGenerated || isUnsupportedType(dataType);
 
   // Re-sync draft when the value prop changes (e.g. after a save or data refresh)
   useEffect(() => {
@@ -113,8 +173,14 @@ export function EditableCell({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
-            if (e.key === "Escape") { e.preventDefault(); setDraft(formatDisplay(value)); onCancel(); }
-            else if (e.key === "Enter") { e.preventDefault(); commit(); }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setDraft(formatDisplay(value));
+              onCancel();
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            }
           }}
         >
           <option value="">NULL</option>
@@ -124,41 +190,74 @@ export function EditableCell({
       );
     }
 
+    const hasTypeError = isInvalidForType(draft, dataType);
+    // Show NOT NULL warning when user clears a required field
+    const hasNullWarning = !isNullable && draft === "";
+
     return (
-      <input
-        ref={inputRef}
-        type="text"
-        value={draft}
-        className="w-full h-6 px-1 text-[11px] font-mono bg-background border border-primary/60 rounded outline-none ring-1 ring-primary/40"
-        aria-label={`Edit ${column}`}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={handleKeyDown}
-      />
+      <div className="flex flex-col gap-0.5">
+        <input
+          ref={inputRef}
+          type="text"
+          value={draft}
+          className={cn(
+            "w-full h-6 px-1 text-[11px] font-mono bg-background border rounded outline-none ring-1",
+            hasTypeError || hasNullWarning
+              ? "border-amber-500/60 ring-amber-500/40"
+              : "border-primary/60 ring-primary/40",
+          )}
+          aria-label={`Edit ${column}`}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={handleKeyDown}
+        />
+        {hasTypeError && (
+          <span className="text-[9px] text-amber-600 leading-tight">
+            Not a valid number
+          </span>
+        )}
+        {!hasTypeError && hasNullWarning && (
+          <span className="text-[9px] text-amber-600 leading-tight">
+            Column is NOT NULL
+          </span>
+        )}
+      </div>
     );
   }
 
   // ── Read mode ──────────────────────────────────────────────────────────────
   const isNull = value === null || value === undefined;
   const isBoolean = typeof value === "boolean";
+  const unsupported = isUnsupportedType(dataType);
+
+  const getReadOnlyReason = () => {
+    if (isPrimaryKey) return "Primary key columns are read-only";
+    if (isGenerated) return "Auto-generated column — read-only";
+    if (unsupported) return `${dataType} columns cannot be edited inline`;
+    return null;
+  };
+  const readOnlyReason = getReadOnlyReason();
 
   return (
     <div
       className={cn(
         "truncate font-mono cursor-default select-text",
         isDirty && "bg-yellow-500/15 rounded px-0.5",
-        isPrimaryKey && "opacity-60",
+        readOnly && "opacity-60",
       )}
-      onDoubleClick={!isPrimaryKey ? onStartEdit : undefined}
+      onDoubleClick={!readOnly ? onStartEdit : undefined}
       title={
-        isPrimaryKey
-          ? "Primary key columns are read-only"
-          : isNull
-            ? "NULL — double-click to edit"
-            : `${String(value)} — double-click to edit`
+        readOnlyReason ??
+        (isNull
+          ? "NULL — double-click to edit"
+          : `${String(value)} — double-click to edit`)
       }
     >
-      {isNull ? (
+      {unsupported && !isNull ? (
+        <span className="text-muted-foreground/50 italic text-[11px]">
+          {dataType}
+        </span>
+      ) : isNull ? (
         <span className="text-muted-foreground/30 italic text-[11px]">NULL</span>
       ) : isBoolean ? (
         <span className="text-blue-500 font-semibold text-[11px]">

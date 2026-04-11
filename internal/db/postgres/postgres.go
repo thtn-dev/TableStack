@@ -148,7 +148,11 @@ func (d *Driver) DescribeTable(conn *sql.DB, schema, table string) ([]db.ColumnI
 				  AND tc.table_schema    = c.table_schema
 				  AND tc.table_name      = c.table_name
 				  AND kcu.column_name    = c.column_name
-			) AS is_primary_key
+			) AS is_primary_key,
+			(
+				c.is_generated = 'ALWAYS'
+				OR c.column_default LIKE 'nextval(%'
+			) AS is_generated
 		FROM information_schema.columns c
 		WHERE c.table_schema = $1
 		  AND c.table_name   = $2
@@ -164,7 +168,7 @@ func (d *Driver) DescribeTable(conn *sql.DB, schema, table string) ([]db.ColumnI
 		var c db.ColumnInfo
 		if err := rows.Scan(
 			&c.Name, &c.DataType, &c.IsNullable,
-			&c.DefaultValue, &c.Position, &c.IsPrimaryKey,
+			&c.DefaultValue, &c.Position, &c.IsPrimaryKey, &c.IsGenerated,
 		); err != nil {
 			return nil, err
 		}

@@ -35,8 +35,13 @@ export type DatabaseInfo = DBDatabaseInfo;
 /** A table or view inside a schema. */
 export type TableInfo = DBTableInfo;
 
-/** A column descriptor. */
-export type ColumnInfo = DBColumnInfo;
+/**
+ * A column descriptor.
+ * `isGenerated` is set true for serial/auto-increment and expression-generated columns.
+ * The binding class uses Object.assign so the field flows through at runtime even before
+ * bindings are regenerated. We extend the type to make TypeScript aware of it.
+ */
+export type ColumnInfo = DBColumnInfo & { isGenerated?: boolean };
 
 /** An index descriptor. */
 export type IndexInfo = DBIndexInfo;
