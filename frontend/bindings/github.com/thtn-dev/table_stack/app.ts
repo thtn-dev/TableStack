@@ -15,6 +15,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as db$0 from "./internal/db/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as session$0 from "./internal/session/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as store$0 from "./internal/store/models.js";
 
 export function ActiveConnections(): $CancellablePromise<string[]> {
@@ -76,6 +79,14 @@ export function GetLastActiveProfile(): $CancellablePromise<string> {
     return $Call.ByID(1787524770);
 }
 
+/**
+ * GetLastConnection reads the last saved connection ID. Returns "" if no
+ * connection has been saved yet.
+ */
+export function GetLastConnection(): $CancellablePromise<string> {
+    return $Call.ByID(3478381799);
+}
+
 export function IsConnected(profileID: string): $CancellablePromise<boolean> {
     return $Call.ByID(236330520, profileID);
 }
@@ -122,6 +133,27 @@ export function ListTables(profileID: string, schema: string): $CancellablePromi
     });
 }
 
+/**
+ * LoadSession loads the workspace session for connID from disk.
+ * Returns a default session (1 empty tab) if no saved session exists.
+ */
+export function LoadSession(connID: string): $CancellablePromise<session$0.WorkspaceSession | null> {
+    return $Call.ByID(2280082259, connID).then(($result: any) => {
+        return $$createType16($result);
+    });
+}
+
+/**
+ * OpenFile shows a file open dialog filtered to .sql files.
+ * Returns a new QueryTab populated with the file content.
+ * Returns nil, nil if the user cancels the dialog.
+ */
+export function OpenFile(): $CancellablePromise<session$0.QueryTab | null> {
+    return $Call.ByID(1958968983).then(($result: any) => {
+        return $$createType18($result);
+    });
+}
+
 export function RegisteredDrivers(): $CancellablePromise<string[]> {
     return $Call.ByID(3935134584).then(($result: any) => {
         return $$createType0($result);
@@ -138,6 +170,25 @@ export function SaveConnection(cfg: store$0.ConnectionConfig, plainPassword: str
 }
 
 /**
+ * SaveFile writes the tab content to disk. If tab.FilePath is set, saves in
+ * place; otherwise opens a Save As dialog. Returns the updated tab with
+ * FilePath, Title, and IsDirty updated, or nil, nil if the user cancels.
+ */
+export function SaveFile(tab: session$0.QueryTab): $CancellablePromise<session$0.QueryTab | null> {
+    return $Call.ByID(1396636678, tab).then(($result: any) => {
+        return $$createType18($result);
+    });
+}
+
+/**
+ * SaveLastConnection writes connID to last_connection.txt so the app can
+ * restore the last used connection on next launch.
+ */
+export function SaveLastConnection(connID: string): $CancellablePromise<void> {
+    return $Call.ByID(134231192, connID);
+}
+
+/**
  * SaveProfile persists profile metadata and encrypts the password via the
  * OS-keychain-backed CredentialManager. The plaintext password is never
  * written to profiles.json.
@@ -146,6 +197,14 @@ export function SaveProfile(p: store$0.Profile): $CancellablePromise<store$0.Pro
     return $Call.ByID(406053493, p).then(($result: any) => {
         return $$createType11($result);
     });
+}
+
+/**
+ * SaveSession persists the workspace session for connID to disk.
+ * The frontend calls this with a debounce of 2s after any state change.
+ */
+export function SaveSession(connID: string, sess: session$0.WorkspaceSession): $CancellablePromise<void> {
+    return $Call.ByID(1031450332, connID, sess);
 }
 
 /**
@@ -168,7 +227,7 @@ export function ShowMainWindow(): $CancellablePromise<void> {
  */
 export function TestConnection(p: store$0.Profile): $CancellablePromise<db$0.ConnectResult> {
     return $Call.ByID(1257240193, p).then(($result: any) => {
-        return $$createType15($result);
+        return $$createType19($result);
     });
 }
 
@@ -188,4 +247,8 @@ const $$createType11 = store$0.Profile.createFrom;
 const $$createType12 = $Create.Array($$createType11);
 const $$createType13 = db$0.TableInfo.createFrom;
 const $$createType14 = $Create.Array($$createType13);
-const $$createType15 = db$0.ConnectResult.createFrom;
+const $$createType15 = session$0.WorkspaceSession.createFrom;
+const $$createType16 = $Create.Nullable($$createType15);
+const $$createType17 = session$0.QueryTab.createFrom;
+const $$createType18 = $Create.Nullable($$createType17);
+const $$createType19 = db$0.ConnectResult.createFrom;

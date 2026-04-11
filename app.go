@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/thtn-dev/table_stack/internal/db"
 	_ "github.com/thtn-dev/table_stack/internal/db/mysql"
 	_ "github.com/thtn-dev/table_stack/internal/db/postgres"
+	"github.com/thtn-dev/table_stack/internal/session"
 	"github.com/thtn-dev/table_stack/internal/store"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -17,13 +21,16 @@ import (
 
 // App exposes backend methods to the frontend via Wails bindings.
 type App struct {
-	ctx         context.Context
-	manager     *db.Manager
-	profiles    *store.ProfileStore
-	credentials *store.CredentialManager
-	mu          sync.RWMutex
-	activeID    string
-	showMain    func() error
+	ctx            context.Context
+	manager        *db.Manager
+	profiles       *store.ProfileStore
+	credentials    *store.CredentialManager
+	sessionManager *session.SessionManager
+	app            *application.App // set from main.go after app creation
+	sessDir        string           // path to sessions directory
+	mu             sync.RWMutex
+	activeID       string
+	showMain       func() error
 }
 
 func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
@@ -46,6 +53,14 @@ func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) 
 		return fmt.Errorf("init credential manager: %w", err)
 	}
 	a.credentials = creds
+
+	sessDir := filepath.Join(configDir, "sessions")
+	sm, err := session.NewSessionManager(sessDir)
+	if err != nil {
+		return fmt.Errorf("init session manager: %w", err)
+	}
+	a.sessionManager = sm
+	a.sessDir = sessDir
 
 	return nil
 }
@@ -241,6 +256,123 @@ func (a *App) ListConnections() ([]store.ConnectionConfig, error) {
 // DeleteConnection removes the ConnectionConfig for connectionID.
 func (a *App) DeleteConnection(connectionID string) error {
 	return a.credentials.DeleteConnection(connectionID)
+}
+
+// ---- Session management ---------------------------------------------------
+
+// LoadSession loads the workspace session for connID from disk.
+// Returns a default session (1 empty tab) if no saved session exists.
+func (a *App) LoadSession(connID string) (*session.WorkspaceSession, error) {
+	return a.sessionManager.Load(connID)
+}
+
+// SaveSession persists the workspace session for connID to disk.
+// The frontend calls this with a debounce of 2s after any state change.
+func (a *App) SaveSession(connID string, sess session.WorkspaceSession) error {
+	return a.sessionManager.Save(connID, sess)
+}
+
+// OpenFile shows a file open dialog filtered to .sql files.
+// Returns a new QueryTab populated with the file content.
+// Returns nil, nil if the user cancels the dialog.
+func (a *App) OpenFile() (*session.QueryTab, error) {
+	if a.app == nil {
+		return nil, fmt.Errorf("app not initialized")
+	}
+
+	path, err := a.app.Dialog.OpenFile().
+		SetTitle("Open SQL File").
+		AddFilter("SQL Files", "*.sql").
+		PromptForSingleSelection()
+	if err != nil {
+		return nil, fmt.Errorf("open file dialog: %w", err)
+	}
+	if path == "" {
+		return nil, nil // user cancelled
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read file %s: %w", path, err)
+	}
+
+	tabID := uuid.NewString()
+	title := filepath.Base(path)
+	now := time.Now().Unix()
+
+	return &session.QueryTab{
+		ID:        tabID,
+		Title:     title,
+		Content:   string(data),
+		FilePath:  &path,
+		IsDirty:   false,
+		CreatedAt: now,
+	}, nil
+}
+
+// SaveFile writes the tab content to disk. If tab.FilePath is set, saves in
+// place; otherwise opens a Save As dialog. Returns the updated tab with
+// FilePath, Title, and IsDirty updated, or nil, nil if the user cancels.
+func (a *App) SaveFile(tab session.QueryTab) (*session.QueryTab, error) {
+	if a.app == nil {
+		return nil, fmt.Errorf("app not initialized")
+	}
+
+	var savePath string
+
+	if tab.FilePath != nil {
+		savePath = *tab.FilePath
+	} else {
+		defaultName := tab.Title
+		if !strings.HasSuffix(strings.ToLower(defaultName), ".sql") {
+			defaultName += ".sql"
+		}
+
+		path, err := a.app.Dialog.SaveFile().
+			SetFilename(defaultName).
+			AddFilter("SQL Files", "*.sql").
+			PromptForSingleSelection()
+		if err != nil {
+			return nil, fmt.Errorf("save file dialog: %w", err)
+		}
+		if path == "" {
+			return nil, nil // user cancelled
+		}
+		savePath = path
+	}
+
+	if err := os.WriteFile(savePath, []byte(tab.Content), 0644); err != nil {
+		return nil, fmt.Errorf("write file %s: %w", savePath, err)
+	}
+
+	tab.FilePath = &savePath
+	tab.IsDirty = false
+	tab.Title = filepath.Base(savePath)
+	return &tab, nil
+}
+
+// SaveLastConnection writes connID to last_connection.txt so the app can
+// restore the last used connection on next launch.
+func (a *App) SaveLastConnection(connID string) error {
+	path := filepath.Join(a.sessDir, "last_connection.txt")
+	if err := os.WriteFile(path, []byte(connID), 0600); err != nil {
+		return fmt.Errorf("save last connection: %w", err)
+	}
+	return nil
+}
+
+// GetLastConnection reads the last saved connection ID. Returns "" if no
+// connection has been saved yet.
+func (a *App) GetLastConnection() (string, error) {
+	path := filepath.Join(a.sessDir, "last_connection.txt")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get last connection: %w", err)
+	}
+	return strings.TrimSpace(string(data)), nil
 }
 
 // ---- private helpers ------------------------------------------------------

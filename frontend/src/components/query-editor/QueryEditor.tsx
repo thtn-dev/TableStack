@@ -25,6 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { CursorPos } from "@/store";
 
 // =============================================================================
 // Helpers
@@ -50,7 +51,7 @@ function formatSQL(input: string): string {
 }
 
 // =============================================================================
-// Fix #2: Static theme — defined at module level, NEVER recreated
+// Static theme — defined at module level, NEVER recreated
 // =============================================================================
 const staticTheme = EditorView.theme({
   "&": {
@@ -97,20 +98,34 @@ const staticTheme = EditorView.theme({
 });
 
 // =============================================================================
-// QueryEditor Component
+// QueryEditor Component — controlled by parent via props
 // =============================================================================
 
-export function QueryEditor() {
-  const [sql_value, setSql] = useState(
-    "SELECT *\nFROM pg_catalog.pg_tables\nLIMIT 10;"
-  );
+interface QueryEditorProps {
+  /** ID of the active tab — used as React key to remount editor on tab switch. */
+  tabId: string;
+  /** Current SQL content driven by the parent (EditorStore). */
+  content: string;
+  /** Initial cursor position restored when the tab is activated. */
+  initialCursor?: CursorPos;
+  onContentChange: (content: string) => void;
+  onCursorChange: (cursor: CursorPos) => void;
+}
+
+export function QueryEditor({
+  tabId: _tabId,
+  content,
+  initialCursor,
+  onContentChange,
+  onCursorChange,
+}: QueryEditorProps) {
   const [copied, setCopied] = useState(false);
-  const [cursorLine, setCursorLine] = useState(1);
-  const [cursorCol, setCursorCol] = useState(1);
+  const [cursorLine, setCursorLine] = useState((initialCursor?.line ?? 0) + 1);
+  const [cursorCol, setCursorCol] = useState((initialCursor?.column ?? 0) + 1);
 
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
-  // Fix #1: stable ref — extensions có thể dùng handleRun mới nhất mà không cần recreate
+  // Stable ref for run handler — avoids recreating extensions on every render
   const handleRunRef = useRef<() => void>(() => {});
 
   const activeProfileId = useDBStore((s) => s.activeProfileId);
@@ -123,49 +138,53 @@ export function QueryEditor() {
   useEffect(() => {
     if (!selectedTable) return;
     const newSql = `SELECT *\nFROM "${selectedTable.schema}"."${selectedTable.table}"\nLIMIT 100;`;
-    setSql(newSql);
+    onContentChange(newSql);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTable]);
 
   // ── Run handler ───────────────────────────────────────────────────────────
   const handleRun = useCallback(async () => {
-    if (!activeProfileId || !sql_value.trim() || queryStatus === "loading")
-      return;
-    await executeQuery(activeProfileId, sql_value);
-  }, [activeProfileId, sql_value, queryStatus, executeQuery]);
+    if (!activeProfileId || !content.trim() || queryStatus === "loading") return;
+    await executeQuery(activeProfileId, content);
+  }, [activeProfileId, content, queryStatus, executeQuery]);
 
-  // Fix #1: sync ref mỗi khi handleRun thay đổi — giữ extensions không bị recreate
   useEffect(() => {
     handleRunRef.current = handleRun;
   }, [handleRun]);
 
   // ── Toolbar actions ───────────────────────────────────────────────────────
-  const handleClear = useCallback(() => setSql(""), []);
+  const handleClear = useCallback(() => onContentChange(""), [onContentChange]);
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(sql_value);
+    navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [sql_value]);
+  }, [content]);
 
   const handleFormat = useCallback(() => {
-    setSql((prev) => formatSQL(prev));
-  }, []);
+    onContentChange(formatSQL(content));
+  }, [content, onContentChange]);
 
-  // Fix #3: cursor listener tách riêng, deps rỗng — setCursorLine/Col là stable refs
+  // ── Cursor update listener ────────────────────────────────────────────────
   const cursorUpdateListener = useMemo(
     () =>
       EditorView.updateListener.of((update) => {
         if (update.selectionSet) {
           const pos = update.state.selection.main.head;
           const line = update.state.doc.lineAt(pos);
-          setCursorLine(line.number);
-          setCursorCol(pos - line.from + 1);
+          const newLine = line.number;
+          const newCol = pos - line.from + 1;
+          setCursorLine(newLine);
+          setCursorCol(newCol);
+          onCursorChange({ line: newLine - 1, column: newCol - 1 });
         }
       }),
+    // onCursorChange is stable (store action ref)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
-  // Fix #1 + #2 + #3: extensions chỉ được tạo đúng 1 lần
+  // Extensions created once per tab mount (tabId used as key in parent)
   const extensions = useMemo(
     () => [
       sql({ dialect: PostgreSQL }),
@@ -174,7 +193,6 @@ export function QueryEditor() {
           {
             key: "Mod-Enter",
             run: () => {
-              // luôn gọi phiên bản mới nhất của handleRun qua ref
               handleRunRef.current();
               return true;
             },
@@ -196,9 +214,7 @@ export function QueryEditor() {
           <Button
             size="sm"
             onClick={handleRun}
-            disabled={
-              !activeProfileId || !sql_value.trim() || queryStatus === "loading"
-            }
+            disabled={!activeProfileId || !content.trim() || queryStatus === "loading"}
             className="h-7 gap-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs"
           >
             {queryStatus === "loading" ? (
@@ -218,7 +234,7 @@ export function QueryEditor() {
                 variant="ghost"
                 size="icon"
                 onClick={handleClear}
-                disabled={!sql_value}
+                disabled={!content}
                 className="size-7 text-muted-foreground hover:text-foreground hover:bg-muted"
               >
                 <HugeiconsIcon icon={EraserIcon} size={14} />
@@ -234,13 +250,10 @@ export function QueryEditor() {
                 variant="ghost"
                 size="icon"
                 onClick={handleCopy}
-                disabled={!sql_value}
+                disabled={!content}
                 className="size-7 text-muted-foreground hover:text-foreground hover:bg-muted"
               >
-                <HugeiconsIcon
-                  icon={copied ? Tick01Icon : Copy01Icon}
-                  size={14}
-                />
+                <HugeiconsIcon icon={copied ? Tick01Icon : Copy01Icon} size={14} />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -255,7 +268,7 @@ export function QueryEditor() {
                 variant="ghost"
                 size="icon"
                 onClick={handleFormat}
-                disabled={!sql_value.trim()}
+                disabled={!content.trim()}
                 className="size-7 text-muted-foreground hover:text-foreground hover:bg-muted"
               >
                 <HugeiconsIcon icon={SourceCodeIcon} size={14} />
@@ -295,10 +308,10 @@ export function QueryEditor() {
       >
         <CodeMirror
           ref={editorRef}
-          value={sql_value}
+          value={content}
           height="100%"
           extensions={extensions}
-          onChange={(value) => setSql(value)}
+          onChange={onContentChange}
           theme={theme === "dark" ? androidstudio : githubLight}
           basicSetup={{
             lineNumbers: true,

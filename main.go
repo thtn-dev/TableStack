@@ -128,6 +128,9 @@ func main() {
 		},
 	})
 
+	// Expose the app instance so App methods can use Wails dialogs.
+	appService.app = app
+
 	var mainWindow *application.WebviewWindow
 	var mainMu sync.Mutex
 	var isQuitting bool
