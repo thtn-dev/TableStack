@@ -1,59 +1,152 @@
-# Welcome to Your New Wails3 Project!
+# TableStack
 
-Congratulations on generating your Wails3 application! This README will guide you through the next steps to get your project up and running.
+TableStack is a desktop SQL explorer built with Wails v3.
 
-## Getting Started
+It combines:
+- Go backend for connection management and query execution
+- React + TypeScript frontend for schema browsing and SQL workflow
+- Native desktop packaging via Wails (Windows/macOS/Linux)
 
-1. Navigate to your project directory in the terminal.
+## Current Status
 
-2. To run your application in development mode, use the following command:
+- Wails: v3 alpha
+- Go: 1.25
+- Frontend: React 19 + TypeScript + Vite + Zustand + TailwindCSS 4
+- Supported database drivers in codebase: Postgres and MySQL
 
-   ```
-   wails3 dev
-   ```
+## Core Features
 
-   This will start your application and enable hot-reloading for both frontend and backend changes.
-
-3. To build your application for production, use:
-
-   ```
-   wails3 build
-   ```
-
-   This will create a production-ready executable in the `build` directory.
-
-## Exploring Wails3 Features
-
-Now that you have your project set up, it's time to explore the features that Wails3 offers:
-
-1. **Check out the examples**: The best way to learn is by example. Visit the `examples` directory in the `v3/examples` directory to see various sample applications.
-
-2. **Run an example**: To run any of the examples, navigate to the example's directory and use:
-
-   ```
-   go run .
-   ```
-
-   Note: Some examples may be under development during the alpha phase.
-
-3. **Explore the documentation**: Visit the [Wails3 documentation](https://v3.wails.io/) for in-depth guides and API references.
-
-4. **Join the community**: Have questions or want to share your progress? Join the [Wails Discord](https://discord.gg/JDdSxwjhGf) or visit the [Wails discussions on GitHub](https://github.com/wailsapp/wails/discussions).
+- Connection profile management (create, update, delete)
+- Credential encryption with AES-256-GCM
+- Master key stored in OS keychain
+- Multi-connection state tracking
+- Schema explorer:
+   - Databases
+   - Schemas
+   - Tables/views
+   - Columns
+   - Indexes
+- SQL query execution with tabular result rendering
+- Startup window flow to connect quickly before opening the main workspace
 
 ## Project Structure
 
-Take a moment to familiarize yourself with your project structure:
+Top-level overview:
 
-- `frontend/`: Contains your frontend code (HTML, CSS, JavaScript/TypeScript)
-- `main.go`: The entry point of your Go backend
-- `app.go`: Define your application structure and methods here
-- `wails.json`: Configuration file for your Wails project
+```text
+app.go                    Wails service methods exposed to frontend
+main.go                   App bootstrap and window lifecycle
+internal/
+   db/
+      driver.go             Driver registry and shared interfaces
+      manager.go            Active connection manager
+      query.go              Query execution and result shaping
+      types.go              Shared DB-facing DTOs
+      postgres/             Postgres driver implementation
+      mysql/                MySQL driver implementation
+   store/
+      profiles.go           Profile persistence
+      credentials.go        Encrypted credential persistence
+frontend/
+   src/
+      store/                Zustand state + Wails action layer
+      windows/              StartupWindow and MainWindow routes
+      components/           UI features (schema tree, editor, result panel)
+   bindings/               Auto-generated Wails bindings (do not edit)
+build/config.yml          Wails build/dev configuration
+Taskfile.yml              Task entry points (dev/build/package)
+```
 
-## Next Steps
+## Data Flow
 
-1. Modify the frontend in the `frontend/` directory to create your desired UI.
-2. Add backend functionality in `main.go`.
-3. Use `wails3 dev` to see your changes in real-time.
-4. When ready, build your application with `wails3 build`.
+```text
+UI interaction
+   -> Zustand action (frontend/src/store/useDBStore.ts)
+   -> Wails generated binding call
+   -> App method (app.go)
+   -> internal/db + internal/store
+   -> Database / local config store
+```
 
-Happy coding with Wails3! If you encounter any issues or have questions, don't hesitate to consult the documentation or reach out to the Wails community.
+## Getting Started
+
+### 1) Prerequisites
+
+- Go 1.25+
+- Node.js 20+
+- Wails v3 CLI installed and available as `wails3`
+
+Install Wails CLI if needed:
+
+```bash
+go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+```
+
+### 2) Install frontend dependencies
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 3) Run in development mode
+
+```bash
+wails3 dev -config ./build/config.yml -port 9245
+```
+
+Equivalent Taskfile command:
+
+```bash
+task dev
+```
+
+## Build
+
+```bash
+wails3 build -config ./build/config.yml
+```
+
+Or using Taskfile:
+
+```bash
+task build
+```
+
+## Test
+
+Run all Go tests:
+
+```bash
+go test ./...
+```
+
+Run store package tests only:
+
+```bash
+go test ./internal/store/...
+```
+
+## Frontend Commands
+
+Inside `frontend/`:
+
+```bash
+npm run dev
+npm run build
+npm run preview
+```
+
+## Security Notes
+
+- Profile metadata is stored in user config directory (`dbclient`).
+- Plaintext passwords are not persisted in profile JSON.
+- Passwords are encrypted before being written to disk.
+- Encryption master key is stored in OS keychain.
+
+## Notes for Contributors
+
+- Do not edit files under `frontend/bindings/`; they are generated.
+- Keep Wails calls inside the frontend store layer when possible.
+- Prefer updating `build/config.yml` + `Taskfile.yml` commands consistently.
