@@ -14,16 +14,23 @@ import {
   Layers01Icon,
 } from "@hugeicons/core-free-icons";
 
-import { useDBStore } from "@/store";
+import { useDBStore, useEditorStore } from "@/store";
+import type { QueryResult, AsyncState } from "@/store/types";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+
+// Stable fallback — never recreated, so Zustand selector won't infinite-loop.
+const IDLE_STATE: AsyncState<QueryResult> = { status: "idle", data: null, error: null };
 
 // =============================================================================
 // ResultPanel Component
 // =============================================================================
 
 export function ResultPanel() {
-  const resultState = useDBStore((s) => s.queryResult);
+  const activeTabId = useEditorStore((s) => s.activeTabId);
+  const resultState = useDBStore((s) =>
+    activeTabId ? (s.queryResults[activeTabId] ?? IDLE_STATE) : IDLE_STATE
+  );
   const { data, status, error } = resultState;
 
   // ── Render States ────────────────────────────────────────────────────────

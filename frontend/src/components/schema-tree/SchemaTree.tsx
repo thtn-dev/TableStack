@@ -33,7 +33,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { useDBStore, selectSchemaNode } from "@/store";
+import { useDBStore, useEditorStore, selectSchemaNode } from "@/store";
 import type { Profile, TableInfo, TableRef } from "@/store";
 import { ConnectionDialog } from "@/components/connection";
 import { useSchemaTree } from "./useSchemaTree";
@@ -91,6 +91,7 @@ interface TreeRowProps {
   isExpandable?: boolean;
   isExpanded?: boolean;
   onClick?: () => void;
+  onDoubleClick?: () => void;
   actions?: React.ReactNode;
   className?: string;
   id?: string;
@@ -104,6 +105,7 @@ function TreeRow({
   isExpandable,
   isExpanded,
   onClick,
+  onDoubleClick,
   actions,
   className,
   id,
@@ -115,6 +117,7 @@ function TreeRow({
       aria-selected={isSelected}
       aria-expanded={isExpandable ? isExpanded : undefined}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       className={cn(
         "group/row flex items-center gap-1.5 cursor-pointer select-none",
         "h-6 rounded-md text-xs",
@@ -166,6 +169,18 @@ function TableNode({
   onSelect,
 }: TableNodeProps) {
   const Icon = getTableIcon(table.type);
+  const addTab = useEditorStore((s) => s.addTab);
+
+  const handleDoubleClick = useCallback(() => {
+    // Activate the table (column cache + highlight)
+    onSelect({ profileId, schema: table.schema, table: table.name });
+    // Open a new tab with the default SELECT query
+    addTab({
+      title: table.name,
+      content: `SELECT *\nFROM "${table.schema}"."${table.name}"\nLIMIT 100;`,
+      connectionId: profileId,
+    });
+  }, [addTab, onSelect, table.name, table.schema, profileId]);
 
   return (
     <TreeRow
@@ -180,9 +195,7 @@ function TableNode({
       }
       label={table.name}
       isSelected={isSelected}
-      onClick={() =>
-        onSelect({ profileId, schema: table.schema, table: table.name })
-      }
+      onDoubleClick={handleDoubleClick}
     />
   );
 }

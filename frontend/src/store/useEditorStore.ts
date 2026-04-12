@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { subscribeWithSelector } from "zustand/middleware";
+import { useDBStore } from "./useDBStore";
 
 import {
   LoadSession,
@@ -133,6 +134,8 @@ export const useEditorStore = create<EditorState>()(
             }
           }
         });
+        // Clear the per-tab query result so ResultPanel doesn't show stale data
+        useDBStore.getState().clearQueryResult(tabId);
       },
 
       // ── setActiveTab ──────────────────────────────────────────────────────────
