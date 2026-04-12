@@ -26,9 +26,10 @@ import {
   InformationCircleIcon,
 } from "@hugeicons/core-free-icons";
 
-import { useDBStore, toTableCacheKey } from "@/store";
+import { useDBStore, useEditorStore, toTableCacheKey } from "@/store";
 import { useMutationStore, selectHasDirty, selectSelectedCount, buildRowKey } from "@/store/mutationStore";
 import { extractPrimaryKeys } from "@/types/mutation";
+import type { QueryResult, AsyncState } from "@/store/types";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,16 +46,21 @@ import { cn } from "@/lib/utils";
 import { EditableCell } from "./EditableCell";
 import { toast } from "sonner";
 
+// Stable fallback — never recreated, so Zustand selector won't infinite-loop.
+const IDLE_STATE: AsyncState<QueryResult> = { status: "idle", data: null, error: null };
+
 // =============================================================================
 // ResultPanel
 // =============================================================================
 
 export function ResultPanel() {
-  const resultState = useDBStore((s) => s.queryResult);
+  const activeTabId = useEditorStore((s) => s.activeTabId);
+  const resultState = useDBStore((s) =>
+    activeTabId ? (s.queryResults[activeTabId] ?? IDLE_STATE) : IDLE_STATE
+  );
   const selectedTable = useDBStore((s) => s.selectedTable);
   const activeProfileId = useDBStore((s) => s.activeProfileId);
   const columnCache = useDBStore((s) => s.columnCache);
-
   const { data, status, error } = resultState;
 
   // Derive PK + metadata columns from column cache when a table is selected
