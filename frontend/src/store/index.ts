@@ -13,6 +13,9 @@ export {
   selectSchemaNode,
   selectConnectionCount,
   selectProfiles,
+  selectFullSchema,
+  selectSchemaFetching,
+  selectDialectInfo,
 } from "./useDBStore";
 export type {
   Profile,
@@ -26,6 +29,14 @@ export type {
   SchemaNode,
   AsyncState,
   AsyncStatus,
+  SchemaResult,
+  DatabaseSchema,
+  TableSchema,
+  ColumnSchema,
+  IndexSchema,
+  ForeignKey,
+  DialectInfo,
+  FunctionInfo,
 } from "./types";
 export {
   toTableCacheKey,

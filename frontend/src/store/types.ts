@@ -98,3 +98,18 @@ export function asyncError<T>(
 ): AsyncState<T> {
   return { status: "error", data: previous ?? null, error };
 }
+
+// ---------------------------------------------------------------------------
+// Schema introspection types (re-exported for store consumers)
+// ---------------------------------------------------------------------------
+
+export type {
+  SchemaResult,
+  DatabaseSchema,
+  TableSchema,
+  ColumnSchema,
+  IndexSchema,
+  ForeignKey,
+  DialectInfo,
+  FunctionInfo,
+} from "../types/schema";

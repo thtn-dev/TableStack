@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sync"
@@ -9,6 +10,8 @@ import (
 type Manager struct {
 	mu          sync.RWMutex
 	connections map[string]*Connection
+	cache       *SchemaCache
+	onDDL       func(connID string) // optional callback, called after DDL execution
 }
 
 type Connection struct {
@@ -21,7 +24,15 @@ type Connection struct {
 func NewManager() *Manager {
 	return &Manager{
 		connections: make(map[string]*Connection),
+		cache:       NewSchemaCache(0), // uses default 5-minute TTL
 	}
+}
+
+// SetDDLCallback registers an optional callback that is invoked whenever a
+// DDL statement is executed successfully. The callback receives the connID and
+// runs synchronously in the ExecuteQuery call — keep it non-blocking.
+func (m *Manager) SetDDLCallback(fn func(connID string)) {
+	m.onDDL = fn
 }
 
 func (m *Manager) Add(profile Profile) error {
@@ -76,6 +87,7 @@ func (m *Manager) Remove(id string) {
 		_ = conn.DB.Close()
 		delete(m.connections, id)
 	}
+	m.cache.Invalidate(id)
 }
 
 func (m *Manager) IsActive(id string) bool {
@@ -108,6 +120,55 @@ func (m *Manager) CloseAll() {
 		_ = conn.DB.Close()
 		delete(m.connections, id)
 	}
+	m.cache.InvalidateAll()
+}
+
+// GetSchema returns the full SchemaResult for connID. Results are cached with
+// a TTL of 5 minutes; use RefreshSchema to bypass the cache.
+func (m *Manager) GetSchema(connID string) (*SchemaResult, error) {
+	if result, ok := m.cache.Get(connID); ok {
+		return result, nil
+	}
+
+	conn, err := m.Get(connID)
+	if err != nil {
+		return nil, err
+	}
+
+	si, ok := conn.Driver.(SchemaIntrospector)
+	if !ok {
+		return nil, fmt.Errorf("driver %T does not support schema introspection", conn.Driver)
+	}
+
+	result, err := si.IntrospectSchema(context.Background(), conn.DB)
+	if err != nil {
+		return nil, fmt.Errorf("introspect schema: %w", err)
+	}
+
+	m.cache.Set(connID, result)
+	return result, nil
+}
+
+// RefreshSchema invalidates the cache for connID and fetches a fresh
+// SchemaResult from the database.
+func (m *Manager) RefreshSchema(connID string) (*SchemaResult, error) {
+	m.cache.Invalidate(connID)
+	return m.GetSchema(connID)
+}
+
+// GetDialectInfo returns the static DialectInfo for the driver associated with
+// connID. Returns an empty DialectInfo if the driver does not implement
+// DialectProvider.
+func (m *Manager) GetDialectInfo(connID string) (*DialectInfo, error) {
+	conn, err := m.Get(connID)
+	if err != nil {
+		return nil, err
+	}
+	dp, ok := conn.Driver.(DialectProvider)
+	if !ok {
+		return &DialectInfo{ProviderType: conn.Profile.Driver}, nil
+	}
+	return dp.GetDialectInfo(), nil
 }
 
 func (m *Manager) ListDatabases(connID string) ([]DatabaseInfo, error) {

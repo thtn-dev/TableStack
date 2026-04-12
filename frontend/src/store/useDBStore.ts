@@ -24,6 +24,9 @@ import {
   ExecuteQuery,
 } from "../../bindings/github.com/thtn-dev/table_stack/app";
 
+import { GetSchema, RefreshSchema, GetDialectInfo } from "@/lib/schema-api";
+import { On } from "@wailsio/runtime";
+
 import type {
   Profile,
   TableRef,
@@ -33,6 +36,8 @@ import type {
   SchemaNode,
   AsyncState,
   QueryResult,
+  SchemaResult,
+  DialectInfo,
 } from "./types";
 
 import {
@@ -74,6 +79,14 @@ interface DBState {
   /** Memoized DescribeTable results — keyed by toTableCacheKey(). */
   columnCache: Record<TableCacheKey, AsyncState<ColumnInfo[]>>;
 
+  // ── Full schema (for SQL completion) ────────────────────────────────────────
+  /** Per-profile aggregated schema result (tables + columns + FKs). */
+  fullSchema: Record<string, SchemaResult>;
+  /** Per-profile flag: schema fetch is in progress. */
+  schemaFetching: Record<string, boolean>;
+  /** Per-profile dialect info (keywords, functions, data types). Static data. */
+  dialectInfo: Record<string, DialectInfo>;
+
   // ── Query execution ─────────────────────────────────────────────────────────
   /** Last execution result (current tab). */
   queryResult: AsyncState<QueryResult>;
@@ -107,6 +120,12 @@ interface DBActions {
   fetchColumns: (ref: TableRef) => Promise<void>;
   invalidateColumnCache: (profileId: string) => void;
 
+  // ── Full schema ───────────────────────────────────────────────────────────────
+  fetchFullSchema: (profileId: string) => Promise<void>;
+  refreshFullSchema: (profileId: string) => Promise<void>;
+  fetchDialectInfo: (profileId: string) => Promise<void>;
+  setupSchemaChangeListener: () => void;
+
   // ── Query execution ─────────────────────────────────────────────────────────
   executeQuery: (profileId: string, sql: string) => Promise<void>;
 }
@@ -131,6 +150,11 @@ export const useDBStore = create<DBState & DBActions>()(
       activeProfileId: null,
 
       columnCache: {},
+
+      fullSchema: {},
+      schemaFetching: {},
+      dialectInfo: {},
+
       queryResult: asyncIdle<QueryResult>(),
 
       // ── Profile CRUD ────────────────────────────────────────────────────────
@@ -222,6 +246,9 @@ export const useDBStore = create<DBState & DBActions>()(
           });
           // Load schema tree immediately after connecting
           await get().loadSchemaTree(profileId);
+          // Fire-and-forget: pre-fetch full schema and dialect info for completion
+          void get().fetchFullSchema(profileId);
+          void get().fetchDialectInfo(profileId);
         } catch (err) {
           set((s) => {
             s.connectingIds.delete(profileId);
@@ -241,6 +268,8 @@ export const useDBStore = create<DBState & DBActions>()(
             s.activeConnections.delete(profileId);
             s.connectingIds.delete(profileId);
             delete s.schemaTree[profileId];
+            delete s.fullSchema[profileId];
+            delete s.schemaFetching[profileId];
             // Clear selection if disconnected profile was active
             if (s.activeProfileId === profileId) s.activeProfileId = null;
             if (s.selectedTable?.profileId === profileId)
@@ -396,6 +425,66 @@ export const useDBStore = create<DBState & DBActions>()(
         });
       },
 
+      // ── Full schema ───────────────────────────────────────────────────────
+
+      fetchFullSchema: async (profileId) => {
+        if (get().schemaFetching[profileId]) return;
+        set((s) => {
+          s.schemaFetching[profileId] = true;
+        });
+        try {
+          const result = await GetSchema(profileId);
+          set((s) => {
+            if (result) s.fullSchema[profileId] = result;
+            s.schemaFetching[profileId] = false;
+          });
+        } catch {
+          set((s) => {
+            s.schemaFetching[profileId] = false;
+          });
+        }
+      },
+
+      refreshFullSchema: async (profileId) => {
+        set((s) => {
+          s.schemaFetching[profileId] = true;
+        });
+        try {
+          const result = await RefreshSchema(profileId);
+          set((s) => {
+            if (result) s.fullSchema[profileId] = result;
+            s.schemaFetching[profileId] = false;
+          });
+        } catch {
+          set((s) => {
+            s.schemaFetching[profileId] = false;
+          });
+        }
+      },
+
+      fetchDialectInfo: async (profileId) => {
+        if (get().dialectInfo[profileId]) return; // static data — fetch once
+        try {
+          const result = await GetDialectInfo(profileId);
+          if (result) {
+            set((s) => {
+              s.dialectInfo[profileId] = result;
+            });
+          }
+        } catch {
+          // Non-fatal — completion still works with keywords only
+        }
+      },
+
+      setupSchemaChangeListener: () => {
+        On("schema:changed", (ev) => {
+          const connID = ev.data as string;
+          if (connID) {
+            void get().refreshFullSchema(connID);
+          }
+        });
+      },
+
       // ── Query execution ───────────────────────────────────────────────────
 
       executeQuery: async (profileId, sql) => {
@@ -456,3 +545,15 @@ export const selectConnectionCount = (s: DBState) => s.activeConnections.size;
 
 /** Profile list data (unwrapped). */
 export const selectProfiles = (s: DBState) => s.profiles.data ?? [];
+
+/** Full schema for a given profileId (or null). */
+export const selectFullSchema = (profileId: string | null) => (s: DBState) =>
+  profileId ? (s.fullSchema[profileId] ?? null) : null;
+
+/** Is the schema fetch in progress for a given profileId? */
+export const selectSchemaFetching = (profileId: string | null) => (s: DBState) =>
+  profileId ? (s.schemaFetching[profileId] ?? false) : false;
+
+/** Dialect info for a given profileId (or null). */
+export const selectDialectInfo = (profileId: string | null) => (s: DBState) =>
+  profileId ? (s.dialectInfo[profileId] ?? null) : null;

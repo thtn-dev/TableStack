@@ -13,9 +13,10 @@ import {
   Tick01Icon,
   InformationCircleIcon,
   SourceCodeIcon,
+  RefreshIcon,
 } from "@hugeicons/core-free-icons";
 
-import { useDBStore } from "@/store";
+import { useDBStore, selectFullSchema, selectDialectInfo, selectSchemaFetching } from "@/store";
 import { useThemeStore } from "@/hooks/useTheme";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { CursorPos } from "@/store";
+import { buildCompletionExtension } from "./completionSource";
 
 // =============================================================================
 // Helpers
@@ -132,6 +134,10 @@ export function QueryEditor({
   const selectedTable = useDBStore((s) => s.selectedTable);
   const queryStatus = useDBStore((s) => s.queryResult.status);
   const executeQuery = useDBStore((s) => s.executeQuery);
+  const refreshFullSchema = useDBStore((s) => s.refreshFullSchema);
+  const schema = useDBStore(selectFullSchema(activeProfileId));
+  const dialect = useDBStore(selectDialectInfo(activeProfileId));
+  const schemaFetching = useDBStore(selectSchemaFetching(activeProfileId));
   const theme = useThemeStore((s) => s.theme);
 
   // ── Auto-generate SELECT when a table node is clicked ─────────────────────
@@ -151,6 +157,12 @@ export function QueryEditor({
   useEffect(() => {
     handleRunRef.current = handleRun;
   }, [handleRun]);
+
+  // ── Schema refresh ────────────────────────────────────────────────────────
+  const handleRefreshSchema = useCallback(() => {
+    if (!activeProfileId || schemaFetching) return;
+    void refreshFullSchema(activeProfileId);
+  }, [activeProfileId, schemaFetching, refreshFullSchema]);
 
   // ── Toolbar actions ───────────────────────────────────────────────────────
   const handleClear = useCallback(() => onContentChange(""), [onContentChange]);
@@ -184,7 +196,14 @@ export function QueryEditor({
     []
   );
 
-  // Extensions created once per tab mount (tabId used as key in parent)
+  // Schema-aware completion extension — rebuilt when schema/dialect changes
+  const completionExt = useMemo(
+    () => buildCompletionExtension(schema, dialect),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [schema, dialect]
+  );
+
+  // Extensions — static parts created once; completionExt rebuilt on schema change
   const extensions = useMemo(
     () => [
       sql({ dialect: PostgreSQL }),
@@ -201,8 +220,9 @@ export function QueryEditor({
       ),
       cursorUpdateListener,
       staticTheme,
+      completionExt,
     ],
-    [cursorUpdateListener]
+    [cursorUpdateListener, completionExt]
   );
 
   return (
@@ -276,6 +296,28 @@ export function QueryEditor({
             </TooltipTrigger>
             <TooltipContent side="bottom">Format SQL</TooltipContent>
           </Tooltip>
+
+          <div className="h-4 w-px bg-border/60 mx-0.5" />
+
+          {/* Refresh schema */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefreshSchema}
+                disabled={!activeProfileId || schemaFetching}
+                className="size-7 text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                {schemaFetching ? (
+                  <Spinner className="size-3" />
+                ) : (
+                  <HugeiconsIcon icon={RefreshIcon} size={14} />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Refresh schema</TooltipContent>
+          </Tooltip>
         </div>
 
         {/* Right: status indicators */}
@@ -316,7 +358,7 @@ export function QueryEditor({
           basicSetup={{
             lineNumbers: true,
             highlightActiveLine: true,
-            autocompletion: true,
+            autocompletion: false,
             foldGutter: false,
             indentOnInput: true,
             bracketMatching: true,

@@ -129,6 +129,7 @@ export function MainWindow() {
   const syncActiveConnections = useDBStore((s) => s.syncActiveConnections);
   const syncLastActiveProfile = useDBStore((s) => s.syncLastActiveProfile);
   const loadSchemaTree = useDBStore((s) => s.loadSchemaTree);
+  const setupSchemaChangeListener = useDBStore((s) => s.setupSchemaChangeListener);
   const setActiveProfile = useDBStore((s) => s.setActiveProfile);
   const activeProfileId = useDBStore((s) => s.activeProfileId);
   const activeConnectionsKey = useDBStore((s) =>
@@ -173,6 +174,8 @@ export function MainWindow() {
       }
     }
     void init();
+    // Listen for DDL-triggered schema invalidation from backend
+    setupSchemaChangeListener();
   // Run once on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
