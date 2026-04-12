@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { SchemaTree } from "@/components/schema-tree";
 import { ConnectionDialog } from "@/components/connection";
@@ -9,7 +9,21 @@ import { useDBStore } from "@/store";
 import { useEditorStore, selectActiveTab, useAutoSave } from "@/store";
 import { Button } from "@/components/ui/button";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Add01Icon } from "@hugeicons/core-free-icons";
+import {
+  Add01Icon,
+  PlayIcon,
+  EraserIcon,
+  Copy01Icon,
+  Tick01Icon,
+  SourceCodeIcon,
+  InformationCircleIcon,
+} from "@hugeicons/core-free-icons";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -20,6 +34,156 @@ import {
   LoadSession,
   SaveLastConnection,
 } from "../../bindings/github.com/thtn-dev/table_stack/app";
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function formatSQL(input: string): string {
+  const clauses = [
+    "SELECT", "FROM", "WHERE", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN",
+    "FULL JOIN", "CROSS JOIN", "JOIN", "GROUP BY", "ORDER BY", "HAVING",
+    "LIMIT", "OFFSET", "UNION ALL", "UNION", "INSERT INTO", "VALUES",
+    "UPDATE", "SET", "DELETE FROM", "WITH",
+  ];
+  let result = input;
+  clauses.forEach((kw) => {
+    result = result.replace(new RegExp(`\\b${kw}\\b`, "gi"), `\n${kw}`);
+  });
+  return result.split("\n").map((l) => l.trimStart()).filter(Boolean).join("\n").trim();
+}
+
+// =============================================================================
+// QueryToolbar — Run / Clear / Copy / Format bar rendered above the tab strip
+// =============================================================================
+
+function QueryToolbar() {
+  const activeTab = useEditorStore(selectActiveTab);
+  const updateContent = useEditorStore((s) => s.updateContent);
+  const activeProfileId = useDBStore((s) => s.activeProfileId);
+  const queryStatus = useDBStore((s) =>
+    activeTab ? (s.queryResults[activeTab.id]?.status ?? "idle") : "idle"
+  );
+  const executeQuery = useDBStore((s) => s.executeQuery);
+
+  const [copied, setCopied] = useState(false);
+
+  const content = activeTab?.content ?? "";
+  const tabId = activeTab?.id ?? "";
+
+  const handleRun = useCallback(async () => {
+    if (!activeProfileId || !content.trim() || queryStatus === "loading" || !tabId) return;
+    await executeQuery(activeProfileId, content, tabId);
+  }, [activeProfileId, content, queryStatus, executeQuery, tabId]);
+
+  const handleClear = useCallback(() => {
+    if (tabId) updateContent(tabId, "");
+  }, [tabId, updateContent]);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [content]);
+
+  const handleFormat = useCallback(() => {
+    if (tabId) updateContent(tabId, formatSQL(content));
+  }, [tabId, content, updateContent]);
+
+  const cursorLine = (activeTab?.cursorPos?.line ?? 0) + 1;
+  const cursorCol = (activeTab?.cursorPos?.column ?? 0) + 1;
+
+  return (
+    <div className="flex h-10 shrink-0 items-center justify-between px-3 border-b border-border/40 bg-muted/20">
+      <div className="flex items-center gap-1.5">
+        {/* Run */}
+        <Button
+          size="sm"
+          onClick={handleRun}
+          disabled={!activeProfileId || !content.trim() || queryStatus === "loading" || !tabId}
+          className="h-7 gap-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs"
+        >
+          {queryStatus === "loading" ? (
+            <Spinner className="size-3 border-white/30" />
+          ) : (
+            <HugeiconsIcon icon={PlayIcon} size={13} fill="currentColor" />
+          )}
+          Run
+        </Button>
+
+        <div className="h-4 w-px bg-border/60 mx-0.5" />
+
+        {/* Clear */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleClear}
+              disabled={!content}
+              className="size-7 text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              <HugeiconsIcon icon={EraserIcon} size={14} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Clear</TooltipContent>
+        </Tooltip>
+
+        {/* Copy */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleCopy}
+              disabled={!content}
+              className="size-7 text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              <HugeiconsIcon icon={copied ? Tick01Icon : Copy01Icon} size={14} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{copied ? "Copied!" : "Copy SQL"}</TooltipContent>
+        </Tooltip>
+
+        {/* Format */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleFormat}
+              disabled={!content.trim()}
+              className="size-7 text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              <HugeiconsIcon icon={SourceCodeIcon} size={14} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Format SQL</TooltipContent>
+        </Tooltip>
+      </div>
+
+      {/* Right: cursor + shortcut hint */}
+      <div className="flex items-center gap-2">
+        {!activeProfileId && (
+          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded text-[11px] text-amber-600 dark:text-amber-500">
+            <HugeiconsIcon icon={InformationCircleIcon} size={11} />
+            Connect to run queries
+          </div>
+        )}
+        <span className="text-[11px] font-mono text-muted-foreground/50 tabular-nums">
+          Ln {cursorLine}, Col {cursorCol}
+        </span>
+        <div className="h-3 w-px bg-border/60" />
+        <span className="text-[11px] text-muted-foreground/50 font-mono">
+          Ctrl+Enter
+        </span>
+      </div>
+    </div>
+  );
+}
 
 // =============================================================================
 // MainContent — editor + tab bar area
@@ -89,7 +253,9 @@ function MainContent({ onNewConnection }: MainContentProps) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-muted/10 animate-in fade-in slide-in-from-right-4 duration-500">
-      {/* Tab bar */}
+      {/* Toolbar: Run / Clear / Copy / Format */}
+      <QueryToolbar />
+      {/* Tab strip */}
       <TabBar />
 
       <ResizablePanelGroup orientation="vertical" className="flex-1 overflow-hidden">
