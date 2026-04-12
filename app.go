@@ -36,6 +36,13 @@ type App struct {
 func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.ctx = ctx
 	a.manager = db.NewManager()
+	// Emit a "schema:changed" event to the frontend whenever a DDL statement
+	// is executed successfully, so the completion engine can refresh its cache.
+	a.manager.SetDDLCallback(func(connID string) {
+		if a.app != nil {
+			a.app.Event.Emit("schema:changed", connID)
+		}
+	})
 
 	profiles, err := store.NewProfileStore("dbclient")
 	if err != nil {
@@ -223,6 +230,26 @@ func (a *App) ListIndexes(profileID, schema, table string) ([]db.IndexInfo, erro
 
 func (a *App) ExecuteQuery(profileID, sqlStr string) (*db.QueryResult, error) {
 	return a.manager.ExecuteQuery(profileID, sqlStr)
+}
+
+// GetSchema returns the aggregated SchemaResult for profileID, using a
+// 5-minute in-memory cache. The result is used by the frontend SQL completion
+// engine to suggest table and column names.
+func (a *App) GetSchema(profileID string) (*db.SchemaResult, error) {
+	return a.manager.GetSchema(profileID)
+}
+
+// RefreshSchema bypasses the schema cache and re-introspects the database,
+// returning a fresh SchemaResult. Use this after DDL changes not triggered
+// from within the app (e.g. schema changes made by another client).
+func (a *App) RefreshSchema(profileID string) (*db.SchemaResult, error) {
+	return a.manager.RefreshSchema(profileID)
+}
+
+// GetDialectInfo returns static dialect metadata (keywords, functions, types,
+// operators) for the driver associated with profileID.
+func (a *App) GetDialectInfo(profileID string) (*db.DialectInfo, error) {
+	return a.manager.GetDialectInfo(profileID)
 }
 
 // ShowMainWindow asks the host process to create/focus the main window.

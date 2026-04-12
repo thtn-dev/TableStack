@@ -1,6 +1,7 @@
 package db
 
 import (
+	"strings"
 	"time"
 )
 
@@ -31,6 +32,13 @@ func (m *Manager) ExecuteQuery(connID, sqlStr string) (*QueryResult, error) {
 			}, nil
 		}
 		affected, _ := res.RowsAffected()
+		// Invalidate schema cache on successful DDL
+		if isDDLStatement(sqlStr) {
+			m.cache.Invalidate(connID)
+			if m.onDDL != nil {
+				m.onDDL(connID)
+			}
+		}
 		return &QueryResult{
 			Affected: affected,
 			Duration: duration,
@@ -67,6 +75,36 @@ func (m *Manager) ExecuteQuery(connID, sqlStr string) (*QueryResult, error) {
 		Rows:     resultRows,
 		Duration: duration,
 	}, rows.Err()
+}
+
+// isDDLStatement reports whether query is a DDL statement (CREATE / ALTER /
+// DROP / RENAME TABLE|VIEW|INDEX, TRUNCATE). Leading whitespace and single-line
+// SQL comments (-- ...) are stripped before matching.
+func isDDLStatement(query string) bool {
+	s := strings.ToUpper(strings.TrimSpace(query))
+	// Strip leading single-line comments
+	for strings.HasPrefix(s, "--") {
+		nl := strings.IndexByte(s, '\n')
+		if nl < 0 {
+			return false
+		}
+		s = strings.TrimSpace(s[nl+1:])
+	}
+	for _, prefix := range ddlPrefixes {
+		if strings.HasPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+var ddlPrefixes = []string{
+	"CREATE TABLE", "CREATE VIEW", "CREATE INDEX", "CREATE UNIQUE INDEX",
+	"CREATE MATERIALIZED VIEW",
+	"ALTER TABLE", "ALTER VIEW",
+	"DROP TABLE", "DROP VIEW", "DROP INDEX",
+	"RENAME TABLE",
+	"TRUNCATE TABLE", "TRUNCATE",
 }
 
 func convertValue(v any) any {
