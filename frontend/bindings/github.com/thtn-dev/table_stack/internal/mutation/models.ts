@@ -5,8 +5,15 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+/**
+ * CellChange represents a modification to a single column value.
+ */
 export class CellChange {
     "column": string;
+
+    /**
+     * used for optimistic locking; nil = no lock
+     */
     "oldValue": any;
     "newValue": any;
 
@@ -25,14 +32,64 @@ export class CellChange {
         Object.assign(this, $$source);
     }
 
+    /**
+     * Creates a new CellChange instance from a string or object.
+     */
     static createFrom($$source: any = {}): CellChange {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new CellChange($$parsedSource as Partial<CellChange>);
     }
 }
 
+/**
+ * DeleteRowsRequest describes rows to delete from a single table.
+ */
+export class DeleteRowsRequest {
+    "schema": string;
+    "table": string;
+
+    /**
+     * one map per row
+     */
+    "primaryKeys": { [_ in string]?: any }[];
+
+    /** Creates a new DeleteRowsRequest instance. */
+    constructor($$source: Partial<DeleteRowsRequest> = {}) {
+        if (!("schema" in $$source)) {
+            this["schema"] = "";
+        }
+        if (!("table" in $$source)) {
+            this["table"] = "";
+        }
+        if (!("primaryKeys" in $$source)) {
+            this["primaryKeys"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new DeleteRowsRequest instance from a string or object.
+     */
+    static createFrom($$source: any = {}): DeleteRowsRequest {
+        const $$createField2_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("primaryKeys" in $$parsedSource) {
+            $$parsedSource["primaryKeys"] = $$createField2_0($$parsedSource["primaryKeys"]);
+        }
+        return new DeleteRowsRequest($$parsedSource as Partial<DeleteRowsRequest>);
+    }
+}
+
+/**
+ * MutationError describes a failure for a single row in a bulk operation.
+ */
 export class MutationError {
     "rowIndex": number;
+
+    /**
+     * see Err* constants below
+     */
     "code": string;
     "message": string;
 
@@ -51,16 +108,22 @@ export class MutationError {
         Object.assign(this, $$source);
     }
 
+    /**
+     * Creates a new MutationError instance from a string or object.
+     */
     static createFrom($$source: any = {}): MutationError {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new MutationError($$parsedSource as Partial<MutationError>);
     }
 }
 
+/**
+ * MutationResponse is returned to the frontend after any mutation operation.
+ */
 export class MutationResponse {
     "success": boolean;
     "affectedRows": number;
-    "errors": MutationError[];
+    "errors"?: MutationError[];
 
     /** Creates a new MutationResponse instance. */
     constructor($$source: Partial<MutationResponse> = {}) {
@@ -70,27 +133,62 @@ export class MutationResponse {
         if (!("affectedRows" in $$source)) {
             this["affectedRows"] = 0;
         }
-        if (!("errors" in $$source)) {
-            this["errors"] = [];
-        }
 
         Object.assign(this, $$source);
     }
 
+    /**
+     * Creates a new MutationResponse instance from a string or object.
+     */
     static createFrom($$source: any = {}): MutationResponse {
-        const $$createField2_0 = $$createType1;
+        const $$createField2_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("errors" in $$parsedSource && $$parsedSource["errors"] != null) {
+        if ("errors" in $$parsedSource) {
             $$parsedSource["errors"] = $$createField2_0($$parsedSource["errors"]);
         }
         return new MutationResponse($$parsedSource as Partial<MutationResponse>);
     }
 }
 
+/**
+ * UpdateBulkRequest wraps multiple row updates for a single transaction.
+ */
+export class UpdateBulkRequest {
+    "rows": UpdateRowRequest[];
+
+    /** Creates a new UpdateBulkRequest instance. */
+    constructor($$source: Partial<UpdateBulkRequest> = {}) {
+        if (!("rows" in $$source)) {
+            this["rows"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new UpdateBulkRequest instance from a string or object.
+     */
+    static createFrom($$source: any = {}): UpdateBulkRequest {
+        const $$createField0_0 = $$createType5;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("rows" in $$parsedSource) {
+            $$parsedSource["rows"] = $$createField0_0($$parsedSource["rows"]);
+        }
+        return new UpdateBulkRequest($$parsedSource as Partial<UpdateBulkRequest>);
+    }
+}
+
+/**
+ * UpdateRowRequest describes a single row mutation.
+ */
 export class UpdateRowRequest {
     "schema": string;
     "table": string;
-    "primaryKeys": Record<string, any>;
+
+    /**
+     * e.g. {"id": 42} or {"org_id": 1, "user_id": 5}
+     */
+    "primaryKeys": { [_ in string]?: any };
     "changes": CellChange[];
 
     /** Creates a new UpdateRowRequest instance. */
@@ -111,68 +209,29 @@ export class UpdateRowRequest {
         Object.assign(this, $$source);
     }
 
+    /**
+     * Creates a new UpdateRowRequest instance from a string or object.
+     */
     static createFrom($$source: any = {}): UpdateRowRequest {
-        const $$createField3_0 = $$createType3;
+        const $$createField2_0 = $$createType0;
+        const $$createField3_0 = $$createType7;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("changes" in $$parsedSource && $$parsedSource["changes"] != null) {
+        if ("primaryKeys" in $$parsedSource) {
+            $$parsedSource["primaryKeys"] = $$createField2_0($$parsedSource["primaryKeys"]);
+        }
+        if ("changes" in $$parsedSource) {
             $$parsedSource["changes"] = $$createField3_0($$parsedSource["changes"]);
         }
         return new UpdateRowRequest($$parsedSource as Partial<UpdateRowRequest>);
     }
 }
 
-export class UpdateBulkRequest {
-    "rows": UpdateRowRequest[];
-
-    /** Creates a new UpdateBulkRequest instance. */
-    constructor($$source: Partial<UpdateBulkRequest> = {}) {
-        if (!("rows" in $$source)) {
-            this["rows"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    static createFrom($$source: any = {}): UpdateBulkRequest {
-        const $$createField0_0 = $$createType5;
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        if ("rows" in $$parsedSource && $$parsedSource["rows"] != null) {
-            $$parsedSource["rows"] = $$createField0_0($$parsedSource["rows"]);
-        }
-        return new UpdateBulkRequest($$parsedSource as Partial<UpdateBulkRequest>);
-    }
-}
-
-export class DeleteRowsRequest {
-    "schema": string;
-    "table": string;
-    "primaryKeys": Record<string, any>[];
-
-    /** Creates a new DeleteRowsRequest instance. */
-    constructor($$source: Partial<DeleteRowsRequest> = {}) {
-        if (!("schema" in $$source)) {
-            this["schema"] = "";
-        }
-        if (!("table" in $$source)) {
-            this["table"] = "";
-        }
-        if (!("primaryKeys" in $$source)) {
-            this["primaryKeys"] = [];
-        }
-
-        Object.assign(this, $$source);
-    }
-
-    static createFrom($$source: any = {}): DeleteRowsRequest {
-        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new DeleteRowsRequest($$parsedSource as Partial<DeleteRowsRequest>);
-    }
-}
-
 // Private type creation functions
-const $$createType0 = MutationError.createFrom;
+const $$createType0 = $Create.Map($Create.Any, $Create.Any);
 const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = CellChange.createFrom;
+const $$createType2 = MutationError.createFrom;
 const $$createType3 = $Create.Array($$createType2);
 const $$createType4 = UpdateRowRequest.createFrom;
 const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = CellChange.createFrom;
+const $$createType7 = $Create.Array($$createType6);

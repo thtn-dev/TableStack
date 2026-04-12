@@ -10,6 +10,12 @@ export class ColumnInfo {
     "dataType": string;
     "isNullable": boolean;
     "isPrimaryKey": boolean;
+
+    /**
+     * IsGenerated is true for serial/auto-increment columns and expression-generated columns.
+     * These columns cannot be edited by the user.
+     */
+    "isGenerated": boolean;
     "defaultValue": string;
     "position": number;
 
@@ -26,6 +32,9 @@ export class ColumnInfo {
         }
         if (!("isPrimaryKey" in $$source)) {
             this["isPrimaryKey"] = false;
+        }
+        if (!("isGenerated" in $$source)) {
+            this["isGenerated"] = false;
         }
         if (!("defaultValue" in $$source)) {
             this["defaultValue"] = "";

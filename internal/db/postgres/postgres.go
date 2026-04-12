@@ -149,9 +149,12 @@ func (d *Driver) DescribeTable(conn *sql.DB, schema, table string) ([]db.ColumnI
 				  AND tc.table_name      = c.table_name
 				  AND kcu.column_name    = c.column_name
 			) AS is_primary_key,
-			(
-				c.is_generated = 'ALWAYS'
-				OR c.column_default LIKE 'nextval(%'
+			COALESCE(
+				(
+					COALESCE(c.is_generated, 'NEVER') = 'ALWAYS'
+					OR COALESCE(c.column_default, '') LIKE 'nextval(%'
+				),
+				false
 			) AS is_generated
 		FROM information_schema.columns c
 		WHERE c.table_schema = $1

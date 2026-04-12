@@ -116,9 +116,9 @@ func (d *Driver) DescribeTable(conn *sql.DB, schema, table string) ([]db.ColumnI
 			COALESCE(c.COLUMN_DEFAULT, '')                              AS column_default,
 			c.ORDINAL_POSITION,
 			c.COLUMN_KEY = 'PRI'                                       AS is_primary_key,
-			(c.EXTRA LIKE '%auto_increment%'
-			 OR c.EXTRA LIKE '%VIRTUAL GENERATED%'
-			 OR c.EXTRA LIKE '%STORED GENERATED%')                     AS is_generated
+			(COALESCE(c.EXTRA, '') LIKE '%auto_increment%'
+			 OR COALESCE(c.EXTRA, '') LIKE '%VIRTUAL GENERATED%'
+			 OR COALESCE(c.EXTRA, '') LIKE '%STORED GENERATED%')       AS is_generated
 		FROM information_schema.columns c
 		WHERE c.TABLE_SCHEMA = ?
 		  AND c.TABLE_NAME   = ?

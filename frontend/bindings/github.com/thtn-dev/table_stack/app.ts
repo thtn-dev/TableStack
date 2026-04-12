@@ -51,9 +51,18 @@ export function DeleteProfile(id: string): $CancellablePromise<void> {
     return $Call.ByID(2457157279, id);
 }
 
+/**
+ * DeleteRows deletes the specified rows within a single transaction.
+ */
+export function DeleteRows(connID: string, req: mutation$0.DeleteRowsRequest): $CancellablePromise<mutation$0.MutationResponse> {
+    return $Call.ByID(344276775, connID, req).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
 export function DescribeTable(profileID: string, schema: string, table: string): $CancellablePromise<db$0.ColumnInfo[]> {
     return $Call.ByID(3867090276, profileID, schema, table).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType3($result);
     });
 }
 
@@ -63,7 +72,7 @@ export function Disconnect(profileID: string): $CancellablePromise<void> {
 
 export function ExecuteQuery(profileID: string, sqlStr: string): $CancellablePromise<db$0.QueryResult | null> {
     return $Call.ByID(2868660388, profileID, sqlStr).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
@@ -99,19 +108,19 @@ export function IsConnected(profileID: string): $CancellablePromise<boolean> {
  */
 export function ListConnections(): $CancellablePromise<store$0.ConnectionConfig[]> {
     return $Call.ByID(786053378).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
 export function ListDatabases(profileID: string): $CancellablePromise<db$0.DatabaseInfo[]> {
     return $Call.ByID(4238628917, profileID).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType9($result);
     });
 }
 
 export function ListIndexes(profileID: string, schema: string, table: string): $CancellablePromise<db$0.IndexInfo[]> {
     return $Call.ByID(3383199879, profileID, schema, table).then(($result: any) => {
-        return $$createType10($result);
+        return $$createType11($result);
     });
 }
 
@@ -120,7 +129,7 @@ export function ListIndexes(profileID: string, schema: string, table: string): $
  */
 export function ListProfiles(): $CancellablePromise<store$0.Profile[]> {
     return $Call.ByID(1957526603).then(($result: any) => {
-        return $$createType12($result);
+        return $$createType13($result);
     });
 }
 
@@ -132,7 +141,7 @@ export function ListSchemas(profileID: string): $CancellablePromise<string[]> {
 
 export function ListTables(profileID: string, schema: string): $CancellablePromise<db$0.TableInfo[]> {
     return $Call.ByID(364749488, profileID, schema).then(($result: any) => {
-        return $$createType14($result);
+        return $$createType15($result);
     });
 }
 
@@ -142,7 +151,7 @@ export function ListTables(profileID: string, schema: string): $CancellablePromi
  */
 export function LoadSession(connID: string): $CancellablePromise<session$0.WorkspaceSession | null> {
     return $Call.ByID(2280082259, connID).then(($result: any) => {
-        return $$createType16($result);
+        return $$createType17($result);
     });
 }
 
@@ -153,7 +162,7 @@ export function LoadSession(connID: string): $CancellablePromise<session$0.Works
  */
 export function OpenFile(): $CancellablePromise<session$0.QueryTab | null> {
     return $Call.ByID(1958968983).then(($result: any) => {
-        return $$createType18($result);
+        return $$createType19($result);
     });
 }
 
@@ -179,7 +188,7 @@ export function SaveConnection(cfg: store$0.ConnectionConfig, plainPassword: str
  */
 export function SaveFile(tab: session$0.QueryTab): $CancellablePromise<session$0.QueryTab | null> {
     return $Call.ByID(1396636678, tab).then(($result: any) => {
-        return $$createType18($result);
+        return $$createType19($result);
     });
 }
 
@@ -198,7 +207,7 @@ export function SaveLastConnection(connID: string): $CancellablePromise<void> {
  */
 export function SaveProfile(p: store$0.Profile): $CancellablePromise<store$0.Profile> {
     return $Call.ByID(406053493, p).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType12($result);
     });
 }
 
@@ -230,52 +239,39 @@ export function ShowMainWindow(): $CancellablePromise<void> {
  */
 export function TestConnection(p: store$0.Profile): $CancellablePromise<db$0.ConnectResult> {
     return $Call.ByID(1257240193, p).then(($result: any) => {
-        return $$createType19($result);
+        return $$createType20($result);
     });
 }
 
 /**
  * UpdateRows updates one or more rows in the database within a single
  * transaction. If any row fails the entire operation is rolled back.
- * NOTE: Method ID computed from FNV-32a("main.App.UpdateRows").
- * Run `wails3 dev` to regenerate with the authoritative ID.
  */
 export function UpdateRows(connID: string, req: mutation$0.UpdateBulkRequest): $CancellablePromise<mutation$0.MutationResponse> {
     return $Call.ByID(119372497, connID, req).then(($result: any) => {
-        return $$createTypeMutationResponse($result);
-    });
-}
-
-/**
- * DeleteRows deletes the specified rows within a single transaction.
- * NOTE: Method ID computed from FNV-32a("main.App.DeleteRows").
- * Run `wails3 dev` to regenerate with the authoritative ID.
- */
-export function DeleteRows(connID: string, req: mutation$0.DeleteRowsRequest): $CancellablePromise<mutation$0.MutationResponse> {
-    return $Call.ByID(344276775, connID, req).then(($result: any) => {
-        return $$createTypeMutationResponse($result);
+        return $$createType1($result);
     });
 }
 
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);
-const $$createType1 = db$0.ColumnInfo.createFrom;
-const $$createType2 = $Create.Array($$createType1);
-const $$createType3 = db$0.QueryResult.createFrom;
-const $$createType4 = $Create.Nullable($$createType3);
-const $$createType5 = store$0.ConnectionConfig.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = db$0.DatabaseInfo.createFrom;
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = db$0.IndexInfo.createFrom;
-const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = store$0.Profile.createFrom;
-const $$createType12 = $Create.Array($$createType11);
-const $$createType13 = db$0.TableInfo.createFrom;
-const $$createType14 = $Create.Array($$createType13);
-const $$createType15 = session$0.WorkspaceSession.createFrom;
-const $$createType16 = $Create.Nullable($$createType15);
-const $$createType17 = session$0.QueryTab.createFrom;
-const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = db$0.ConnectResult.createFrom;
-const $$createTypeMutationResponse = mutation$0.MutationResponse.createFrom;
+const $$createType1 = mutation$0.MutationResponse.createFrom;
+const $$createType2 = db$0.ColumnInfo.createFrom;
+const $$createType3 = $Create.Array($$createType2);
+const $$createType4 = db$0.QueryResult.createFrom;
+const $$createType5 = $Create.Nullable($$createType4);
+const $$createType6 = store$0.ConnectionConfig.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = db$0.DatabaseInfo.createFrom;
+const $$createType9 = $Create.Array($$createType8);
+const $$createType10 = db$0.IndexInfo.createFrom;
+const $$createType11 = $Create.Array($$createType10);
+const $$createType12 = store$0.Profile.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = db$0.TableInfo.createFrom;
+const $$createType15 = $Create.Array($$createType14);
+const $$createType16 = session$0.WorkspaceSession.createFrom;
+const $$createType17 = $Create.Nullable($$createType16);
+const $$createType18 = session$0.QueryTab.createFrom;
+const $$createType19 = $Create.Nullable($$createType18);
+const $$createType20 = db$0.ConnectResult.createFrom;
