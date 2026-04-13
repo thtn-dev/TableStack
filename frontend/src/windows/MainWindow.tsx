@@ -72,9 +72,17 @@ function QueryToolbar() {
   const tabId = activeTab?.id ?? "";
 
   const handleRun = useCallback(async () => {
-    if (!activeProfileId || !content.trim() || queryStatus === "loading" || !tabId) return;
-    await executeQuery(activeProfileId, content, tabId);
-  }, [activeProfileId, content, queryStatus, executeQuery, tabId]);
+    if (!activeProfileId || queryStatus === "loading") return;
+
+    const { activeTabId, tabs } = useEditorStore.getState();
+    if (!activeTabId) return;
+
+    const latestTab = tabs.find((t) => t.id === activeTabId);
+    const latestContent = latestTab?.content ?? "";
+    if (!latestContent.trim()) return;
+
+    await executeQuery(activeProfileId, latestContent, activeTabId);
+  }, [activeProfileId, queryStatus, executeQuery]);
 
   const handleClear = useCallback(() => {
     if (tabId) updateContent(tabId, "");

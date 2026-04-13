@@ -170,17 +170,27 @@ function TableNode({
 }: TableNodeProps) {
   const Icon = getTableIcon(table.type);
   const addTab = useEditorStore((s) => s.addTab);
+  const executeQuery = useDBStore((s) => s.executeQuery);
 
   const handleDoubleClick = useCallback(() => {
     // Activate the table (column cache + highlight)
     onSelect({ profileId, schema: table.schema, table: table.name });
+    
+    // Auto-generate ID to link the tab and the query
+    const tabId = crypto.randomUUID();
+    const content = `SELECT *\nFROM "${table.schema}"."${table.name}"\nLIMIT 100;`;
+    
     // Open a new tab with the default SELECT query
     addTab({
+      id: tabId,
       title: table.name,
-      content: `SELECT *\nFROM "${table.schema}"."${table.name}"\nLIMIT 100;`,
+      content,
       connectionId: profileId,
     });
-  }, [addTab, onSelect, table.name, table.schema, profileId]);
+    
+    // Automatically execute the query
+    void executeQuery(profileId, content, tabId);
+  }, [addTab, executeQuery, onSelect, table.name, table.schema, profileId]);
 
   return (
     <TreeRow

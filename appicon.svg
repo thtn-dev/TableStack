@@ -1,0 +1,39 @@
+<svg viewBox="0 0 680 540" xmlns="http://www.w3.org/2000/svg">
+
+<g transform="translate(340,260)">
+<g transform="scale(0.9) translate(0,-97)">
+
+<!-- GREEN BLOCK -->
+<polygon points="0,54 130,129 0,204 -130,129" fill="#06D6A0"/>
+<polygon points="-130,129 0,204 0,252 -130,177" fill="#049A73"/>
+<polygon points="0,204 130,129 130,177 0,252" fill="#05A87D"/>
+
+<!-- Green edges -->
+<line x1="-130" y1="129" x2="0" y2="204" stroke="#026B4F" stroke-width="1" stroke-linecap="butt"/>
+<line x1="0" y1="204" x2="130" y2="129" stroke="#026B4F" stroke-width="1" stroke-linecap="butt"/>
+<line x1="0" y1="204" x2="0" y2="252" stroke="#026B4F" stroke-width="1" stroke-linecap="butt"/>
+
+<!-- YELLOW BLOCK -->
+<polygon points="0,-2 130,73 0,148 -130,73" fill="#FFD166"/>
+<polygon points="-130,73 0,148 0,196 -130,121" fill="#D4A332"/>
+<polygon points="0,148 130,73 130,121 0,196" fill="#E0B035"/>
+
+<!-- Yellow edges -->
+<line x1="-130" y1="73" x2="0" y2="148" stroke="#9A7A1E" stroke-width="1" stroke-linecap="butt"/>
+<line x1="0" y1="148" x2="130" y2="73" stroke="#9A7A1E" stroke-width="1" stroke-linecap="butt"/>
+<line x1="0" y1="148" x2="0" y2="196" stroke="#9A7A1E" stroke-width="1" stroke-linecap="butt"/>
+
+<!-- RED BLOCK -->
+<polygon points="0,-58 130,17 0,92 -130,17" fill="#E63946"/>
+<polygon points="-130,17 0,92 0,140 -130,65" fill="#CC2936"/>
+<polygon points="0,92 130,17 130,65 0,140" fill="#D42D3A"/>
+
+<!-- Red edges -->
+<line x1="-130" y1="17" x2="0" y2="92" stroke="#8B1A24" stroke-width="1" stroke-linecap="butt"/>
+<line x1="0" y1="92" x2="130" y2="17" stroke="#8B1A24" stroke-width="1" stroke-linecap="butt"/>
+<line x1="0" y1="92" x2="0" y2="140" stroke="#8B1A24" stroke-width="1" stroke-linecap="butt"/>
+
+</g>
+</g>
+
+</svg>
