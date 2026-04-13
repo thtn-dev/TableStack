@@ -33,7 +33,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { useDBStore, selectSchemaNode } from "@/store";
+import { useDBStore, useEditorStore, selectSchemaNode } from "@/store";
 import type { Profile, TableInfo, TableRef } from "@/store";
 import { ConnectionDialog } from "@/components/connection";
 import { useSchemaTree } from "./useSchemaTree";
@@ -86,11 +86,12 @@ function SectionLabel({ label }: { label: string }) {
 interface TreeRowProps {
   depth: number;
   icon: React.ReactNode;
-  label: string;
+  label: React.ReactNode;
   isSelected?: boolean;
   isExpandable?: boolean;
   isExpanded?: boolean;
   onClick?: () => void;
+  onDoubleClick?: () => void;
   actions?: React.ReactNode;
   className?: string;
   id?: string;
@@ -104,6 +105,7 @@ function TreeRow({
   isExpandable,
   isExpanded,
   onClick,
+  onDoubleClick,
   actions,
   className,
   id,
@@ -115,6 +117,7 @@ function TreeRow({
       aria-selected={isSelected}
       aria-expanded={isExpandable ? isExpanded : undefined}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       className={cn(
         "group/row flex items-center gap-1.5 cursor-pointer select-none",
         "h-6 rounded-md text-xs",
@@ -129,7 +132,7 @@ function TreeRow({
       {isExpandable ? (
         <Chevron open={Boolean(isExpanded)} />
       ) : (
-        <span className="w-[11px] shrink-0" />
+        <span className="w-2.75 shrink-0" />
       )}
 
       {/* Node icon */}
@@ -166,6 +169,28 @@ function TableNode({
   onSelect,
 }: TableNodeProps) {
   const Icon = getTableIcon(table.type);
+  const addTab = useEditorStore((s) => s.addTab);
+  const executeQuery = useDBStore((s) => s.executeQuery);
+
+  const handleDoubleClick = useCallback(() => {
+    // Activate the table (column cache + highlight)
+    onSelect({ profileId, schema: table.schema, table: table.name });
+    
+    // Auto-generate ID to link the tab and the query
+    const tabId = crypto.randomUUID();
+    const content = `SELECT *\nFROM "${table.schema}"."${table.name}"\nLIMIT 100;`;
+    
+    // Open a new tab with the default SELECT query
+    addTab({
+      id: tabId,
+      title: table.name,
+      content,
+      connectionId: profileId,
+    });
+    
+    // Automatically execute the query
+    void executeQuery(profileId, content, tabId);
+  }, [addTab, executeQuery, onSelect, table.name, table.schema, profileId]);
 
   return (
     <TreeRow
@@ -180,9 +205,7 @@ function TableNode({
       }
       label={table.name}
       isSelected={isSelected}
-      onClick={() =>
-        onSelect({ profileId, schema: table.schema, table: table.name })
-      }
+      onDoubleClick={handleDoubleClick}
     />
   );
 }
@@ -428,6 +451,9 @@ function ProfileNode({
     <span className="block h-1.5 w-1.5 rounded-full bg-muted-foreground/30 shrink-0" />
   );
 
+  const tagColor = profile.tag?.color || "#6B7280";
+  const tagName = profile.tag?.name || "Default";
+
   return (
     <>
       <TreeRow
@@ -441,8 +467,9 @@ function ProfileNode({
               <HugeiconsIcon
                 icon={DatabaseIcon}
                 size={13}
+                style={{ color: isConnected ? tagColor : undefined }}
                 className={cn(
-                  isConnected ? "text-primary" : "text-muted-foreground",
+                  !isConnected && "text-muted-foreground",
                 )}
               />
               <span className="absolute -bottom-0.5 -right-0.5">
@@ -451,7 +478,16 @@ function ProfileNode({
             </div>
           )
         }
-        label={profile.name}
+        label={
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span
+              className="inline-block h-2 w-2 shrink-0 rounded-sm"
+              style={{ backgroundColor: tagColor }}
+              title={tagName}
+            />
+            <span className="truncate">{profile.name}</span>
+          </span>
+        }
         isExpandable={isConnected}
         isExpanded={isExpanded}
         onClick={() => {

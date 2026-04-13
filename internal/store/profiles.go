@@ -17,16 +17,47 @@ type ProfileStore struct {
 	profiles map[string]Profile
 }
 
+// Tag gắn nhãn màu cho một profile kết nối.
+type Tag struct {
+	Name  string `json:"name"`
+	Color string `json:"color"` // hex color, e.g. "#3B82F6"
+}
+
+// DefaultTag là tag mặc định khi người dùng không chọn.
+var DefaultTag = Tag{Name: "Default", Color: "#6B7280"}
+
+// TagPresets là 16 màu sắc phổ biến để người dùng chọn.
+var TagPresets = []Tag{
+	{Name: "Gray", Color: "#6B7280"},
+	{Name: "Stone", Color: "#78716C"},
+	{Name: "Red", Color: "#EF4444"},
+	{Name: "Orange", Color: "#F97316"},
+	{Name: "Amber", Color: "#F59E0B"},
+	{Name: "Yellow", Color: "#EAB308"},
+	{Name: "Lime", Color: "#84CC16"},
+	{Name: "Green", Color: "#22C55E"},
+	{Name: "Emerald", Color: "#10B981"},
+	{Name: "Teal", Color: "#14B8A6"},
+	{Name: "Cyan", Color: "#06B6D4"},
+	{Name: "Sky", Color: "#0EA5E9"},
+	{Name: "Blue", Color: "#3B82F6"},
+	{Name: "Indigo", Color: "#6366F1"},
+	{Name: "Violet", Color: "#8B5CF6"},
+	{Name: "Pink", Color: "#EC4899"},
+}
+
 // Profile — mirror của db.Profile, tách riêng để store không import db
 type Profile struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
+	Driver   string `json:"driver"`
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	User     string `json:"user"`
 	Password string `json:"password"`
 	Database string `json:"database"`
 	SSLMode  string `json:"sslMode"`
+	Tag      Tag    `json:"tag"`
 }
 
 // NewProfileStore khởi tạo store, tự tạo file nếu chưa có
@@ -54,6 +85,12 @@ func (s *ProfileStore) Save(p Profile) (Profile, error) {
 
 	if p.ID == "" {
 		p.ID = uuid.NewString()
+	}
+	if p.Tag.Name == "" {
+		p.Tag = DefaultTag
+	}
+	if p.Tag.Color == "" {
+		p.Tag.Color = DefaultTag.Color
 	}
 	s.profiles[p.ID] = p
 

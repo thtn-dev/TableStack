@@ -14,15 +14,23 @@ import {
   Layers01Icon,
 } from "@hugeicons/core-free-icons";
 
-import { useDBStore } from "@/store";
+import { useDBStore, useEditorStore } from "@/store";
+import type { QueryResult, AsyncState } from "@/store/types";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
+
+// Stable fallback — never recreated, so Zustand selector won't infinite-loop.
+const IDLE_STATE: AsyncState<QueryResult> = { status: "idle", data: null, error: null };
 
 // =============================================================================
 // ResultPanel Component
 // =============================================================================
 
 export function ResultPanel() {
-  const resultState = useDBStore((s) => s.queryResult);
+  const activeTabId = useEditorStore((s) => s.activeTabId);
+  const resultState = useDBStore((s) =>
+    activeTabId ? (s.queryResults[activeTabId] ?? IDLE_STATE) : IDLE_STATE
+  );
   const { data, status, error } = resultState;
 
   // ── Render States ────────────────────────────────────────────────────────
@@ -198,7 +206,7 @@ function VirtualTable({ result }: { result: any }) {
         },
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [result] // re-compute only when the result object itself changes (new query)
+    [result], // re-compute only when the result object itself changes (new query)
   );
 
   // ── TanStack Table ────────────────────────────────────────────────────────
@@ -226,18 +234,14 @@ function VirtualTable({ result }: { result: any }) {
   const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
   const paddingBottom =
     virtualRows.length > 0
-      ? rowVirtualizer.getTotalSize() -
-        virtualRows[virtualRows.length - 1].end
+      ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
       : 0;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Scrollable container */}
-      <div
-        ref={tableContainerRef}
-        className="flex-1 overflow-auto"
-      >
+      <div ref={tableContainerRef} className="flex-1 overflow-auto">
         <table
           className="border-separate border-spacing-0"
           style={{ width: "max-content", minWidth: "100%" }}
@@ -257,7 +261,7 @@ function VirtualTable({ result }: { result: any }) {
                   >
                     {flexRender(
                       header.column.columnDef.header,
-                      header.getContext()
+                      header.getContext(),
                     )}
                   </th>
                 ))}
@@ -278,7 +282,12 @@ function VirtualTable({ result }: { result: any }) {
               return (
                 <tr
                   key={row.id}
-                  className="hover:bg-muted/20 transition-colors"
+                  className={cn(
+                    "hover:bg-muted/70 transition-colors",
+                    virtualRow.index % 2 !== 0
+                      ? "bg-muted/50"
+                      : "bg-transparent",
+                  )}
                 >
                   {/* Row number cell */}
                   <td className="w-10 px-2 py-1 text-center text-[10px] font-mono text-muted-foreground/25 border-b border-r border-border/20 select-none bg-muted/5">
@@ -292,7 +301,7 @@ function VirtualTable({ result }: { result: any }) {
                       <div className="truncate font-mono">
                         {flexRender(
                           cell.column.columnDef.cell,
-                          cell.getContext()
+                          cell.getContext(),
                         )}
                       </div>
                     </td>

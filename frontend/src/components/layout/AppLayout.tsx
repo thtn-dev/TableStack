@@ -1,7 +1,16 @@
-import type { ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
+import {
+  usePanelRef,
+  type PanelSize,
+} from "react-resizable-panels";
 import { cn } from "@/lib/utils";
 import { TitleBar } from "./TitleBar";
 import { StatusBar, type ConnectionStatus } from "./StatusBar";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,7 +22,6 @@ interface AppLayoutProps {
   /** Main content area — TabBar + QueryEditor + ResultPanel */
   children: ReactNode;
 
-  // StatusBar props forwarded from global state
   connectionStatus?: ConnectionStatus;
   activeDatabase?: string | null;
   rowCount?: number | null;
@@ -24,12 +32,19 @@ interface AppLayoutProps {
 }
 
 // ---------------------------------------------------------------------------
+// Right sidebar placeholder
+// ---------------------------------------------------------------------------
+
+function RightSidebarPlaceholder() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 overflow-hidden">
+      <p className="text-[12px] text-muted-foreground">Coming soon</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // AppLayout
-//
-// Grid:
-//   [TitleBar]          ← spans full width (col 1-2)
-//   [Sidebar | Main]    ← sidebar fixed 260px, main flexible
-//   [StatusBar]         ← spans full width (col 1-2)
 // ---------------------------------------------------------------------------
 
 export function AppLayout({
@@ -42,49 +57,131 @@ export function AppLayout({
   statusMessage,
   className,
 }: AppLayoutProps) {
+  const leftPanelRef = usePanelRef();
+  const rightPanelRef = usePanelRef();
+
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
+
+  const toggleLeftSidebar = useCallback(() => {
+    const panel = leftPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) {
+      panel.expand();
+    } else {
+      panel.collapse();
+    }
+  }, [leftPanelRef]);
+
+  const rightPanelEverOpened = useRef(false);
+
+  const toggleRightSidebar = useCallback(() => {
+    const panel = rightPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) {
+      if (!rightPanelEverOpened.current) {
+        rightPanelEverOpened.current = true;
+        panel.resize(200);
+      } else {
+        panel.expand();
+      }
+    } else {
+      panel.collapse();
+    }
+  }, [rightPanelRef]);
+
+  const handleLeftResize = useCallback((size: PanelSize) => {
+    setLeftSidebarOpen(size.asPercentage > 0);
+  }, []);
+
+  const handleRightResize = useCallback((size: PanelSize) => {
+    setRightSidebarOpen(size.asPercentage > 0);
+  }, []);
+
   return (
     <div
       id="app-layout"
       className={cn(
-        // Full viewport, no overflow leak
         "h-screen w-screen overflow-hidden",
-        // Three-row grid: title / content / status
         "grid grid-rows-[auto_1fr_auto]",
         "bg-background text-foreground",
-        className
+        className,
       )}
     >
       {/* ── Row 1: Title bar ── */}
-      <TitleBar className="col-span-full" />
+      <TitleBar
+        className="col-span-full"
+        leftSidebarOpen={leftSidebarOpen}
+        onToggleLeftSidebar={toggleLeftSidebar}
+        rightSidebarOpen={rightSidebarOpen}
+        onToggleRightSidebar={toggleRightSidebar}
+      />
 
-      {/* ── Row 2: Sidebar + Main ── */}
-      <div
+      {/* ── Row 2: Resizable panels ── */}
+      <ResizablePanelGroup
         id="app-body"
-        className="grid min-h-0 overflow-hidden"
-        style={{
-          gridTemplateColumns: "260px 1fr",
-        }}
+        orientation="horizontal"
+        className="min-h-0"
       >
-        {/* Sidebar */}
-        <aside
-          id="app-sidebar"
-          className={cn(
-            "flex flex-col min-h-0 overflow-y-auto overflow-x-hidden",
-            "border-r border-border/60",
-            "bg-sidebar text-sidebar-foreground"
-          )}
+        {/* Left sidebar */}
+        <ResizablePanel
+          panelRef={leftPanelRef}
+          id="left-sidebar"
+          defaultSize={240}
+          minSize={32}
+          maxSize={380}
+          collapsible
+          collapsedSize={0}
+          groupResizeBehavior="preserve-pixel-size"
+          onResize={handleLeftResize}
+          className="bg-sidebar text-sidebar-foreground"
         >
-          {sidebar}
-        </aside>
+          <aside className="flex flex-col h-full overflow-y-auto overflow-x-hidden border-r border-border/60">
+            {sidebar}
+          </aside>
+        </ResizablePanel>
+
+        <ResizableHandle
+          className={cn(
+            "w-px bg-border/60 hover:bg-primary/40 transition-colors",
+            !leftSidebarOpen && "hidden",
+          )}
+        />
 
         {/* Main content */}
-        <main
-          id="app-main"
-          className="flex flex-col min-h-0 overflow-hidden bg-background"
+        <ResizablePanel
+          id="main-content"
+          minSize={200}
+          groupResizeBehavior="preserve-pixel-size"
         >
-          {children}
-        </main>
-      </div>
+          <main className="flex flex-col h-full overflow-hidden bg-background">
+            {children}
+          </main>
+        </ResizablePanel>
+
+        <ResizableHandle
+          className={cn(
+            "w-px bg-border/60 hover:bg-primary/40 transition-colors",
+            !rightSidebarOpen && "hidden",
+          )}
+        />
+
+        {/* Right sidebar */}
+        <ResizablePanel
+          panelRef={rightPanelRef}
+          id="right-sidebar"
+          defaultSize={0}
+          minSize={32}
+          maxSize={480}
+          collapsible
+          collapsedSize={0}
+          groupResizeBehavior="preserve-pixel-size"
+          onResize={handleRightResize}
+          className="bg-sidebar text-sidebar-foreground border-l border-border/60"
+        >
+          <RightSidebarPlaceholder />
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {/* ── Row 3: Status bar ── */}
       <StatusBar

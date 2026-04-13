@@ -5,7 +5,8 @@
 
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
 
-    "allowJs": false,
+    "allowJs": true,
+    "checkJs": false,
     "skipLibCheck": true,
 
     /* FIX HERE */
@@ -24,8 +25,7 @@
     "jsx": "react-jsx",
 
     "paths": {
-      "@/*": ["./src/*"],
-      "@wailsjs/*": ["./wailsjs/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"],

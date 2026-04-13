@@ -13,13 +13,16 @@ import {
   Connect,
   Disconnect,
   ActiveConnections,
+  GetLastActiveProfile,
   ListDatabases,
   ListSchemas,
   ListTables,
   DescribeTable,
   ListIndexes,
+  SetLastActiveProfile,
+  ShowMainWindow,
   ExecuteQuery,
-} from "@wailsjs/go/main/App";
+} from "../../bindings/github.com/thtn-dev/table_stack/app";
 
 import type {
   Profile,
@@ -72,8 +75,8 @@ interface DBState {
   columnCache: Record<TableCacheKey, AsyncState<ColumnInfo[]>>;
 
   // ── Query execution ─────────────────────────────────────────────────────────
-  /** Last execution result (current tab). */
-  queryResult: AsyncState<QueryResult>;
+  /** Per-tab execution results, keyed by tab ID. */
+  queryResults: Record<string, AsyncState<QueryResult>>;
 }
 
 // =============================================================================
@@ -90,6 +93,8 @@ interface DBActions {
   connect: (profileId: string) => Promise<void>;
   disconnect: (profileId: string) => Promise<void>;
   syncActiveConnections: () => Promise<void>;
+  syncLastActiveProfile: () => Promise<void>;
+  openMainWindow: () => Promise<void>;
 
   // ── Schema tree ──────────────────────────────────────────────────────────────
   loadSchemaTree: (profileId: string) => Promise<void>;
@@ -103,7 +108,8 @@ interface DBActions {
   invalidateColumnCache: (profileId: string) => void;
 
   // ── Query execution ─────────────────────────────────────────────────────────
-  executeQuery: (profileId: string, sql: string) => Promise<void>;
+  executeQuery: (profileId: string, sql: string, tabId: string) => Promise<void>;
+  clearQueryResult: (tabId: string) => void;
 }
 
 // =============================================================================
@@ -126,7 +132,7 @@ export const useDBStore = create<DBState & DBActions>()(
       activeProfileId: null,
 
       columnCache: {},
-      queryResult: asyncIdle<QueryResult>(),
+      queryResults: {},
 
       // ── Profile CRUD ────────────────────────────────────────────────────────
 
@@ -147,9 +153,39 @@ export const useDBStore = create<DBState & DBActions>()(
       },
 
       saveProfile: async (profile) => {
+        const isEditing = Boolean(profile.id);
+        const wasConnected = isEditing
+          ? get().activeConnections.has(profile.id)
+          : false;
+
         const saved = await SaveProfile(profile);
         // Refresh list after save
         await get().loadProfiles();
+
+        if (wasConnected) {
+          set((s) => {
+            s.connectingIds.add(saved.id);
+          });
+          try {
+            await Connect(saved.id);
+            set((s) => {
+              s.activeConnections.add(saved.id);
+              s.connectingIds.delete(saved.id);
+              s.activeProfileId = saved.id;
+            });
+            await get().loadSchemaTree(saved.id);
+          } catch (err) {
+            set((s) => {
+              s.activeConnections.delete(saved.id);
+              s.connectingIds.delete(saved.id);
+              delete s.schemaTree[saved.id];
+              if (s.selectedTable?.profileId === saved.id) s.selectedTable = null;
+              if (s.activeProfileId === saved.id) s.activeProfileId = null;
+            });
+            throw err;
+          }
+        }
+
         return saved;
       },
 
@@ -225,6 +261,30 @@ export const useDBStore = create<DBState & DBActions>()(
         }
       },
 
+      syncLastActiveProfile: async () => {
+        try {
+          const id = await GetLastActiveProfile();
+          if (!id) {
+            return;
+          }
+
+          if (!get().activeConnections.has(id)) {
+            return;
+          }
+
+          set((s) => {
+            s.activeProfileId = id;
+          });
+          await get().loadSchemaTree(id);
+        } catch {
+          // Non-fatal — app can still work
+        }
+      },
+
+      openMainWindow: async () => {
+        await ShowMainWindow();
+      },
+
       // ── Schema tree ───────────────────────────────────────────────────────
 
       loadSchemaTree: async (profileId) => {
@@ -294,6 +354,7 @@ export const useDBStore = create<DBState & DBActions>()(
         set((s) => {
           s.activeProfileId = profileId;
         });
+        void SetLastActiveProfile(profileId ?? "");
       },
 
       // ── Column cache ──────────────────────────────────────────────────────
@@ -338,30 +399,38 @@ export const useDBStore = create<DBState & DBActions>()(
 
       // ── Query execution ───────────────────────────────────────────────────
 
-      executeQuery: async (profileId, sql) => {
+      executeQuery: async (profileId, sql, tabId) => {
         set((s) => {
           // Reset completely — do NOT preserve stale data.
           // Preserving previous data causes VirtualTable to stay mounted during
           // loading, then re-receive new colDefs when results arrive, which
           // triggers a TanStack Table rebuild loop that freezes the UI on empty
           // result sets (second run).
-          s.queryResult = asyncLoading<QueryResult>();
+          s.queryResults[tabId] = asyncLoading<QueryResult>();
         });
 
         try {
           const res = await ExecuteQuery(profileId, sql);
           set((s) => {
-            if (res.error) {
-              s.queryResult = asyncError(res.error, res);
+            if (!res) {
+              s.queryResults[tabId] = asyncError("Empty query result");
+            } else if (res.error) {
+              s.queryResults[tabId] = asyncError(res.error, res);
             } else {
-              s.queryResult = asyncSuccess(res);
+              s.queryResults[tabId] = asyncSuccess(res);
             }
           });
         } catch (err) {
           set((s) => {
-            s.queryResult = asyncError(String(err));
+            s.queryResults[tabId] = asyncError(String(err));
           });
         }
+      },
+
+      clearQueryResult: (tabId) => {
+        set((s) => {
+          delete s.queryResults[tabId];
+        });
       },
     })),
   ),

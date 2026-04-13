@@ -1,163 +1,169 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  PlayIcon,
-  EraserIcon,
-  Copy01Icon,
-  Tick01Icon,
-  InformationCircleIcon,
-} from "@hugeicons/core-free-icons";
+import { useRef, useCallback, useEffect, useMemo } from "react";
+import CodeMirror, { ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import { sql, PostgreSQL } from "@codemirror/lang-sql";
+import { githubLight } from '@uiw/codemirror-theme-github';
+import { androidstudio } from '@uiw/codemirror-theme-androidstudio';
+import { keymap, EditorView } from "@codemirror/view";
+import { Prec } from "@codemirror/state";
 
 import { useDBStore } from "@/store";
-import { Button } from "@/components/ui/button";
+import { useThemeStore } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
-import { Spinner } from "@/components/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { CursorPos } from "@/store";
 
 // =============================================================================
-// QueryEditor Component
+// Static theme — defined at module level, NEVER recreated
+// =============================================================================
+const staticTheme = EditorView.theme({
+  "&": {
+    fontSize: "13px",
+    fontFamily: 'var(--font-mono, "JetBrains Mono", "Fira Code", monospace)',
+    height: "100%",
+  },
+  ".cm-scroller": {
+    overflow: "auto",
+    lineHeight: "1.6",
+    fontFamily: "inherit",
+  },
+  ".cm-gutters": {
+    backgroundColor: "transparent",
+    borderRight: "1px solid hsl(var(--border) / 0.4)",
+    color: "hsl(var(--muted-foreground) / 0.4)",
+    minWidth: "40px",
+  },
+  ".cm-activeLineGutter": {
+    backgroundColor: "hsl(var(--muted) / 0.5)",
+  },
+  ".cm-activeLine": {
+    backgroundColor: "hsl(var(--muted) / 0.25)",
+  },
+  ".cm-focused .cm-cursor": {
+    borderLeftColor: "hsl(var(--foreground))",
+  },
+  ".cm-selectionBackground, .cm-content ::selection": {
+    backgroundColor: "rgba(59, 130, 246, 0.3) !important",
+  },
+  ".cm-tooltip-autocomplete": {
+    border: "1px solid hsl(var(--border))",
+    borderRadius: "6px",
+    backgroundColor: "hsl(var(--popover))",
+    color: "hsl(var(--popover-foreground))",
+  },
+  ".cm-tooltip-autocomplete ul li[aria-selected]": {
+    backgroundColor: "hsl(var(--accent))",
+    color: "hsl(var(--accent-foreground))",
+  },
+  ".cm-editor.cm-focused": {
+    outline: "none",
+  },
+});
+
+// =============================================================================
+// QueryEditor Component — controlled by parent via props
 // =============================================================================
 
-export function QueryEditor() {
-  const [sql, setSql] = useState("SELECT * FROM pg_catalog.pg_tables LIMIT 10;");
-  const [copied, setCopied] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+interface QueryEditorProps {
+  /** ID of the active tab — used as React key to remount editor on tab switch. */
+  tabId: string;
+  /** Current SQL content driven by the parent (EditorStore). */
+  content: string;
+  /** Initial cursor position restored when the tab is activated. */
+  initialCursor?: CursorPos;
+  onContentChange: (content: string) => void;
+  onCursorChange: (cursor: CursorPos) => void;
+}
+
+export function QueryEditor({
+  tabId,
+  content,
+  initialCursor,
+  onContentChange,
+  onCursorChange,
+}: QueryEditorProps) {
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
+
+  // Stable ref for run handler — avoids recreating extensions on every render
+  const handleRunRef = useRef<() => void>(() => {});
 
   const activeProfileId = useDBStore((s) => s.activeProfileId);
-  const selectedTable = useDBStore((s) => s.selectedTable);
-  const queryStatus = useDBStore((s) => s.queryResult.status);
+  const queryStatus = useDBStore((s) => s.queryResults[tabId]?.status ?? "idle");
   const executeQuery = useDBStore((s) => s.executeQuery);
+  const theme = useThemeStore((s) => s.theme);
 
-  // Auto-generate SQL when a table is selected
-  useEffect(() => {
-    if (selectedTable) {
-      setSql(`SELECT * FROM "${selectedTable.schema}"."${selectedTable.table}" LIMIT 100;`);
-    }
-  }, [selectedTable]);
-
+  // ── Run handler (Mod+Enter shortcut) ─────────────────────────────────────
   const handleRun = useCallback(async () => {
-    if (!activeProfileId || !sql.trim() || queryStatus === "loading") return;
-    await executeQuery(activeProfileId, sql);
-  }, [activeProfileId, sql, queryStatus, executeQuery]);
+    if (!activeProfileId || !content.trim() || queryStatus === "loading") return;
+    await executeQuery(activeProfileId, content, tabId);
+  }, [activeProfileId, content, queryStatus, executeQuery, tabId]);
 
-  const handleClear = () => setSql("");
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  }, [handleRun]);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(sql);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // ── Handlers ───────────────────────────────────────────────────────────────
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // 1. Tab Indentation
-    if (e.key === "Tab") {
-      e.preventDefault();
-      const start = e.currentTarget.selectionStart;
-      const end = e.currentTarget.selectionEnd;
-      const value = e.currentTarget.value;
-
-      setSql(value.substring(0, start) + "\t" + value.substring(end));
-
-      // Reset cursor position after state update
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 1;
+  // ── Cursor update listener ────────────────────────────────────────────────
+  const cursorUpdateListener = useMemo(
+    () =>
+      EditorView.updateListener.of((update) => {
+        if (update.selectionSet) {
+          const pos = update.state.selection.main.head;
+          const line = update.state.doc.lineAt(pos);
+          onCursorChange({ line: line.number - 1, column: pos - line.from });
         }
-      }, 0);
-    }
+      }),
+    // onCursorChange is stable (store action ref)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
-    // 2. Ctrl + Enter to Run
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      handleRun();
-    }
-  };
+  // Extensions created once per tab mount (tabId used as key in parent)
+  const extensions = useMemo(
+    () => [
+      sql({ dialect: PostgreSQL }),
+      Prec.highest(
+        keymap.of([
+          {
+            key: "Mod-Enter",
+            run: () => {
+              handleRunRef.current();
+              return true;
+            },
+          },
+        ])
+      ),
+      cursorUpdateListener,
+      staticTheme,
+    ],
+    [cursorUpdateListener]
+  );
 
   return (
-    <div className="flex h-full flex-col bg-background border-b border-border/40">
-      {/* ── Toolbar ── */}
-      <div className="flex h-10 shrink-0 items-center justify-between px-3 border-b border-border/40 bg-muted/20">
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            onClick={handleRun}
-            disabled={!activeProfileId || !sql.trim() || queryStatus === "loading"}
-            className="h-7.5 gap-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-          >
-            {queryStatus === "loading" ? (
-              <Spinner className="size-3.5 border-white/30" />
-            ) : (
-              <HugeiconsIcon icon={PlayIcon} size={14} fill="currentColor" />
-            )}
-            Run
-          </Button>
-
-          <div className="h-4 w-px bg-border/60 mx-1" />
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleClear}
-                className="size-7.5 text-muted-foreground hover:text-foreground hover:bg-muted"
-              >
-                <HugeiconsIcon icon={EraserIcon} size={16} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Clear Editor</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleCopy}
-                className="size-7.5 text-muted-foreground hover:text-foreground hover:bg-muted"
-              >
-                <HugeiconsIcon icon={copied ? Tick01Icon : Copy01Icon} size={16} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{copied ? "Copied!" : "Copy SQL"}</TooltipContent>
-          </Tooltip>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {!activeProfileId && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded text-[11px] text-amber-600 dark:text-amber-500">
-              <HugeiconsIcon icon={InformationCircleIcon} size={12} />
-              Connect to run queries
-            </div>
-          )}
-          <span className="text-[11px] text-muted-foreground/60 font-mono">
-            Ctrl + Enter
-          </span>
-        </div>
-      </div>
-
-      {/* ── Editor ── */}
-      <div className="relative flex-1 group">
-        <textarea
-          ref={textareaRef}
-          value={sql}
-          onChange={(e) => setSql(e.target.value)}
-          onKeyDown={onKeyDown}
-          spellCheck={false}
-          autoFocus
-          className={cn(
-            "h-full w-full resize-none bg-transparent p-4 outline-none",
-            "font-mono text-[13px] leading-relaxed subpixel-antialiased",
-            "placeholder:text-muted-foreground/30",
-            !activeProfileId && "opacity-50"
-          )}
-          placeholder="-- Write your SQL here...
-SELECT * FROM users;"
+    <div className="flex h-full flex-col bg-background">
+      {/* ── CodeMirror editor ─────────────────────────────────────────────── */}
+      <div
+        className={cn(
+          "relative flex-1 overflow-hidden",
+          !activeProfileId && "opacity-60 pointer-events-none"
+        )}
+      >
+        <CodeMirror
+          ref={editorRef}
+          value={content}
+          height="100%"
+          extensions={extensions}
+          onChange={onContentChange}
+          theme={theme === "dark" ? androidstudio : githubLight}
+          basicSetup={{
+            lineNumbers: true,
+            highlightActiveLine: true,
+            autocompletion: true,
+            foldGutter: false,
+            indentOnInput: true,
+            bracketMatching: true,
+            closeBrackets: true,
+            searchKeymap: false,
+          }}
+          className="h-full"
         />
-
-        {/* Gutter / UI elements could go here in future */}
       </div>
     </div>
   );
