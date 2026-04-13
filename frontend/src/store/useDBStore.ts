@@ -22,6 +22,7 @@ import {
   SetLastActiveProfile,
   ShowMainWindow,
   ExecuteQuery,
+  FetchRowByPK,
 } from "../../bindings/github.com/thtn-dev/table_stack/app";
 
 import type {
@@ -110,6 +111,35 @@ interface DBActions {
   // ── Query execution ─────────────────────────────────────────────────────────
   executeQuery: (profileId: string, sql: string, tabId: string) => Promise<void>;
   clearQueryResult: (tabId: string) => void;
+
+  // ── Row-level sync (post-mutation) ───────────────────────────────────────────
+  /** Replace a single row in a tab's result after a successful edit. */
+  patchQueryRow: (
+    tabId: string,
+    pkColumns: string[],
+    pkValues: Record<string, unknown>,
+    freshResult: QueryResult,
+  ) => void;
+  /** Remove rows from a tab's result after a successful delete. */
+  removeQueryRows: (
+    tabId: string,
+    pkColumns: string[],
+    pkValuesList: Record<string, unknown>[],
+  ) => void;
+  /**
+   * Re-fetch a single row from the DB and patch local state.
+   * Returns 'patched' when the row was updated, or 'gone' when the row no
+   * longer exists (also removes it from local state automatically).
+   * Throws on network / DB errors.
+   */
+  syncRowAfterEdit: (
+    tabId: string,
+    connID: string,
+    schema: string,
+    table: string,
+    pkColumns: string[],
+    pkValues: Record<string, unknown>,
+  ) => Promise<"patched" | "gone">;
 }
 
 // =============================================================================
@@ -431,6 +461,70 @@ export const useDBStore = create<DBState & DBActions>()(
         set((s) => {
           delete s.queryResults[tabId];
         });
+      },
+
+      patchQueryRow: (tabId, pkColumns, pkValues, freshResult) => {
+        set((s) => {
+          const resultState = s.queryResults[tabId];
+          if (!resultState?.data?.rows?.length || !freshResult.rows?.length) return;
+
+          const origCols = resultState.data.columns;
+          const freshCols = freshResult.columns;
+          const freshRow = freshResult.rows[0];
+
+          const pkIndices = pkColumns.map((pk) => origCols.indexOf(pk));
+          if (pkIndices.some((i) => i === -1)) return;
+
+          const rowIdx = resultState.data.rows.findIndex((row) =>
+            pkColumns.every((pk, j) => String(row[pkIndices[j]]) === String(pkValues[pk]))
+          );
+          if (rowIdx === -1) return;
+
+          // Remap fresh row values into the original column order.
+          // Columns absent from the fresh SELECT * are left unchanged.
+          const oldRow = resultState.data.rows[rowIdx];
+          resultState.data.rows[rowIdx] = origCols.map((col, origIdx) => {
+            const freshIdx = freshCols.indexOf(col);
+            return freshIdx !== -1 ? freshRow[freshIdx] : oldRow[origIdx];
+          });
+        });
+      },
+
+      removeQueryRows: (tabId, pkColumns, pkValuesList) => {
+        set((s) => {
+          const resultState = s.queryResults[tabId];
+          if (!resultState?.data?.rows?.length) return;
+
+          const origCols = resultState.data.columns;
+          const pkIndices = pkColumns.map((pk) => origCols.indexOf(pk));
+          if (pkIndices.some((i) => i === -1)) return;
+
+          const toRemove = new Set(
+            pkValuesList.map((pkMap) =>
+              pkColumns.map((pk) => String(pkMap[pk])).join("\0")
+            )
+          );
+
+          resultState.data.rows = resultState.data.rows.filter((row) => {
+            const key = pkColumns.map((_, j) => String(row[pkIndices[j]])).join("\0");
+            return !toRemove.has(key);
+          });
+        });
+      },
+
+      syncRowAfterEdit: async (tabId, connID, schema, table, pkColumns, pkValues) => {
+        const freshResult = await FetchRowByPK(connID, schema, table, pkValues as any);
+        if (!freshResult) throw new Error("FetchRowByPK returned null");
+        if (freshResult.error) throw new Error(freshResult.error);
+
+        if (!freshResult.rows?.length) {
+          // Row was deleted between the edit and the re-fetch
+          get().removeQueryRows(tabId, pkColumns, [pkValues]);
+          return "gone";
+        }
+
+        get().patchQueryRow(tabId, pkColumns, pkValues, freshResult);
+        return "patched";
       },
     })),
   ),

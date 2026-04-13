@@ -77,6 +77,16 @@ export function ExecuteQuery(profileID: string, sqlStr: string): $CancellablePro
 }
 
 /**
+ * FetchRowByPK retrieves a single row by its primary key after a mutation.
+ * Returns an empty result (zero rows) if the row was deleted between operations.
+ */
+export function FetchRowByPK(connID: string, schema: string, table: string, primaryKeys: { [_ in string]?: any }): $CancellablePromise<db$0.QueryResult | null> {
+    return $Call.ByID(3756747153, connID, schema, table, primaryKeys).then(($result: any) => {
+        return $$createType5($result);
+    });
+}
+
+/**
  * GetConnectionPassword decrypts and returns the stored password for
  * connectionID. The plaintext is only transmitted over the local IPC bridge.
  */

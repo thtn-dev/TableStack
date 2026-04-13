@@ -32,7 +32,7 @@ func sortedKeys(m map[string]any) []string {
 	return keys
 }
 
-// SQLBuilder generates parameterized SQL for UPDATE and DELETE.
+// SQLBuilder generates parameterized SQL for UPDATE, DELETE, and SELECT.
 // Each database dialect has its own implementation.
 type SQLBuilder interface {
 	// BuildUpdate returns a parameterized UPDATE statement and argument slice.
@@ -40,6 +40,9 @@ type SQLBuilder interface {
 
 	// BuildDelete returns a parameterized DELETE statement and argument slice.
 	BuildDelete(req DeleteRowsRequest) (query string, args []any, err error)
+
+	// BuildSelect returns a parameterized SELECT * statement for a single row lookup.
+	BuildSelect(schema, table string, primaryKeys map[string]any) (query string, args []any, err error)
 }
 
 // builderForDialect returns the correct SQLBuilder for the given driver name.
@@ -194,6 +197,40 @@ func (b *PostgresSQLBuilder) BuildDelete(req DeleteRowsRequest) (string, []any, 
 	return query, args, nil
 }
 
+// BuildSelect builds:
+//
+//	SELECT * FROM "schema"."table" WHERE "pk1"=$1 AND "pk2"=$2 LIMIT 1
+func (b *PostgresSQLBuilder) BuildSelect(schema, table string, primaryKeys map[string]any) (string, []any, error) {
+	if len(primaryKeys) == 0 {
+		return "", nil, errors.New("primaryKeys must not be empty")
+	}
+	if err := validateIdentifier(table); err != nil {
+		return "", nil, fmt.Errorf("table: %w", err)
+	}
+	if schema != "" {
+		if err := validateIdentifier(schema); err != nil {
+			return "", nil, fmt.Errorf("schema: %w", err)
+		}
+	}
+
+	pkCols := sortedKeys(primaryKeys)
+	whereParts := make([]string, len(pkCols))
+	args := make([]any, len(pkCols))
+	for i, col := range pkCols {
+		if err := validateIdentifier(col); err != nil {
+			return "", nil, fmt.Errorf("PK column: %w", err)
+		}
+		whereParts[i] = fmt.Sprintf("%s = %s", b.quoteIdent(col), b.placeholder(i+1))
+		args[i] = primaryKeys[col]
+	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s LIMIT 1",
+		b.tableRef(schema, table),
+		strings.Join(whereParts, " AND "),
+	)
+	return query, args, nil
+}
+
 // =============================================================================
 // MySQL — placeholders: ?  quotes: `backtick`
 // =============================================================================
@@ -305,6 +342,40 @@ func (b *MySQLSQLBuilder) BuildDelete(req DeleteRowsRequest) (string, []any, err
 		b.tableRef(req.Schema, req.Table),
 		colList,
 		strings.Join(tuples, ", "),
+	)
+	return query, args, nil
+}
+
+// BuildSelect builds:
+//
+//	SELECT * FROM `schema`.`table` WHERE `pk1`=? AND `pk2`=? LIMIT 1
+func (b *MySQLSQLBuilder) BuildSelect(schema, table string, primaryKeys map[string]any) (string, []any, error) {
+	if len(primaryKeys) == 0 {
+		return "", nil, errors.New("primaryKeys must not be empty")
+	}
+	if err := validateIdentifier(table); err != nil {
+		return "", nil, fmt.Errorf("table: %w", err)
+	}
+	if schema != "" {
+		if err := validateIdentifier(schema); err != nil {
+			return "", nil, fmt.Errorf("schema: %w", err)
+		}
+	}
+
+	pkCols := sortedKeys(primaryKeys)
+	whereParts := make([]string, len(pkCols))
+	args := make([]any, len(pkCols))
+	for i, col := range pkCols {
+		if err := validateIdentifier(col); err != nil {
+			return "", nil, fmt.Errorf("PK column: %w", err)
+		}
+		whereParts[i] = fmt.Sprintf("%s = ?", b.quoteIdent(col))
+		args[i] = primaryKeys[col]
+	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s LIMIT 1",
+		b.tableRef(schema, table),
+		strings.Join(whereParts, " AND "),
 	)
 	return query, args, nil
 }

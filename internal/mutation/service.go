@@ -78,6 +78,24 @@ func (s *MutationService) ExecuteUpdate(connID string, req UpdateBulkRequest) Mu
 	return executeUpdateWith(&realDB{db: conn.DB}, builder, req)
 }
 
+// FetchRowByPK retrieves a single row by its primary key after a mutation.
+// Returns an empty result (zero rows) if the row no longer exists.
+func (s *MutationService) FetchRowByPK(connID, schema, table string, primaryKeys map[string]any) (*db.QueryResult, error) {
+	conn, err := s.manager.Get(connID)
+	if err != nil {
+		return nil, fmt.Errorf("connection: %w", err)
+	}
+	builder, err := builderForDialect(conn.Profile.Driver)
+	if err != nil {
+		return nil, fmt.Errorf("dialect: %w", err)
+	}
+	query, args, err := builder.BuildSelect(schema, table, primaryKeys)
+	if err != nil {
+		return nil, fmt.Errorf("build select: %w", err)
+	}
+	return s.manager.QueryWithArgs(connID, query, args)
+}
+
 // ExecuteDelete deletes the specified rows in a single transaction.
 func (s *MutationService) ExecuteDelete(connID string, req DeleteRowsRequest) MutationResponse {
 	conn, err := s.manager.Get(connID)

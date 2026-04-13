@@ -391,6 +391,12 @@ func (a *App) DeleteRows(connID string, req mutation.DeleteRowsRequest) mutation
 	return a.mutations.ExecuteDelete(connID, req)
 }
 
+// FetchRowByPK retrieves a single row by its primary key after a mutation.
+// Returns an empty result (zero rows) if the row was deleted between operations.
+func (a *App) FetchRowByPK(connID, schema, table string, primaryKeys map[string]any) (*db.QueryResult, error) {
+	return a.mutations.FetchRowByPK(connID, schema, table, primaryKeys)
+}
+
 // ---- private helpers ------------------------------------------------------
 
 func storeToDBProfile(p store.Profile) db.Profile {

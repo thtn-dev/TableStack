@@ -27,6 +27,7 @@ import {
 } from "@hugeicons/core-free-icons";
 
 import { useDBStore, useEditorStore, toTableCacheKey } from "@/store";
+import type { DirtyRow } from "@/types/mutation";
 import { useMutationStore, selectHasDirty, selectSelectedCount, buildRowKey } from "@/store/mutationStore";
 import { extractPrimaryKeys } from "@/types/mutation";
 import type { QueryResult, AsyncState } from "@/store/types";
@@ -281,6 +282,8 @@ function VirtualTable({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
+  const activeTabId = useEditorStore((s) => s.activeTabId);
+
   const columnNames: string[] = result.columns ?? [];
   const rawRows: any[][] = result.rows ?? [];
 
@@ -344,12 +347,31 @@ function VirtualTable({
   // ── Save + Delete handlers ───────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    if (dirtyRows.size > 1000) {
-      toast.warning(`Saving ${dirtyRows.size} rows. This may take a moment…`);
+    // Snapshot before save — dirtyRows is cleared on success
+    const rowsToSync: DirtyRow[] = Array.from(dirtyRows.values());
+
+    if (rowsToSync.length > 1000) {
+      toast.warning(`Saving ${rowsToSync.length} rows. This may take a moment…`);
     }
     const resp = await saveChanges(connID, schema, table);
     if (resp.success) {
       toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} saved`);
+
+      // Re-fetch each saved row to capture server-side changes (triggers, defaults, etc.)
+      if (activeTabId) {
+        for (const row of rowsToSync) {
+          try {
+            const outcome = await useDBStore.getState().syncRowAfterEdit(
+              activeTabId, connID, schema, table, pkColumns, row.primaryKeys,
+            );
+            if (outcome === "gone") {
+              toast.warning("A saved row was removed by another session.");
+            }
+          } catch {
+            toast.error("Row saved but display may be stale — re-run the query to refresh.");
+          }
+        }
+      }
     } else {
       const code = resp.errors?.[0]?.code ?? "";
       const msg = resp.errors?.[0]?.message ?? "Save failed";
@@ -361,17 +383,28 @@ function VirtualTable({
         toast.error(msg);
       }
     }
-  }, [saveChanges, connID, schema, table, dirtyRows.size]);
+  }, [saveChanges, connID, schema, table, dirtyRows, activeTabId, pkColumns]);
 
   const handleDeleteConfirmed = useCallback(async () => {
     setDeleteConfirmOpen(false);
-    if (selectedCount > 1000) {
-      toast.warning(`Deleting ${selectedCount} rows. This may take a moment…`);
+
+    // Snapshot selected PK maps before delete clears selectedRowKeys
+    const pkValuesList = Array.from(
+      useMutationStore.getState().selectedRowKeys
+    ).map((key) => JSON.parse(key) as Record<string, unknown>);
+
+    if (pkValuesList.length > 1000) {
+      toast.warning(`Deleting ${pkValuesList.length} rows. This may take a moment…`);
     }
     const resp = await deleteSelected(connID, schema, table);
     if (resp.success) {
       toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} deleted`);
       setRowSelection({});
+
+      // Remove deleted rows from local state — no re-fetch needed
+      if (activeTabId) {
+        useDBStore.getState().removeQueryRows(activeTabId, pkColumns, pkValuesList);
+      }
     } else {
       const code = resp.errors?.[0]?.code ?? "";
       const msg = resp.errors?.[0]?.message ?? "Delete failed";
@@ -381,7 +414,7 @@ function VirtualTable({
         toast.error(msg);
       }
     }
-  }, [deleteSelected, connID, schema, table, selectedCount]);
+  }, [deleteSelected, connID, schema, table, selectedCount, activeTabId, pkColumns]);
 
   const handleToggleSelectAll = useCallback(() => {
     if (isAllSelected) {
