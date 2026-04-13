@@ -99,6 +99,29 @@ export function Field({ label, htmlFor, error, required, children, className }: 
 }
 
 // =============================================================================
+// TagPreviewChip — isolated so only this re-renders on tag.name/color changes
+// =============================================================================
+
+interface TagPreviewChipProps {
+  control: Control<ConnectionFormValues>;
+}
+
+function TagPreviewChip({ control }: TagPreviewChipProps) {
+  const tagColor = useWatch({ control, name: "tag.color" });
+  const tagName = useWatch({ control, name: "tag.name" });
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-white select-none"
+      style={{ backgroundColor: tagColor }}
+    >
+      <span className="block h-1.5 w-1.5 rounded-full bg-white/60 shrink-0" />
+      {tagName || "Default"}
+    </span>
+  );
+}
+
+// =============================================================================
 // TagColorSwatches
 // =============================================================================
 
@@ -151,10 +174,6 @@ export function ConnectionFormFields({
   onTogglePassword,
   idPrefix = "conn",
 }: ConnectionFormFieldsProps) {
-  // Read tag values directly from control — no prop drilling, no stale closure risk
-  const tagColor = useWatch({ control, name: "tag.color" });
-  const tagName = useWatch({ control, name: "tag.name" });
-
   const id = (key: string) => `${idPrefix}-${key}`;
 
   return (
@@ -283,13 +302,7 @@ export function ConnectionFormFields({
             Tag
           </span>
           {/* Live preview chip */}
-          <span
-            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-white select-none"
-            style={{ backgroundColor: tagColor }}
-          >
-            <span className="block h-1.5 w-1.5 rounded-full bg-white/60 shrink-0" />
-            {tagName || "Default"}
-          </span>
+          <TagPreviewChip control={control} />
         </div>
 
         <Controller
@@ -305,6 +318,7 @@ export function ConnectionFormFields({
             id={id("tag-name")}
             placeholder="Tag name (e.g. Production)"
             className="h-7 text-xs"
+            autoComplete="off"
             aria-invalid={Boolean(errors.tag?.name?.message)}
             {...register("tag.name")}
           />

@@ -92,8 +92,12 @@ export function QueryEditor({
 
   // ── Run handler (Mod+Enter shortcut) ─────────────────────────────────────
   const handleRun = useCallback(async () => {
-    if (!activeProfileId || !content.trim() || queryStatus === "loading") return;
-    await executeQuery(activeProfileId, content, tabId);
+    if (!activeProfileId || queryStatus === "loading") return;
+
+    const latestContent = editorRef.current?.view?.state.doc.toString() ?? content;
+    if (!latestContent.trim()) return;
+
+    await executeQuery(activeProfileId, latestContent, tabId);
   }, [activeProfileId, content, queryStatus, executeQuery, tabId]);
 
   useEffect(() => {

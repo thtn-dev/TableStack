@@ -122,7 +122,7 @@ export function ResultPanel() {
           >
             <thead>
               <tr>
-                <th className="w-10 px-2 py-1.5 text-[10px] font-mono text-muted-foreground/30 border-b border-r border-border/50 text-center bg-muted/60 select-none">
+                <th className="sticky left-0 z-20 w-10 px-2 py-1.5 text-[10px] font-mono text-muted-foreground/30 border-b border-r border-border/50 text-center bg-muted/70 select-none">
                   #
                 </th>
                 {(data.columns ?? []).map((col: string, i: number) => (
@@ -251,7 +251,7 @@ function VirtualTable({ result }: { result: any }) {
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {/* Row number */}
-                <th className="w-10 px-2 py-1.5 text-[10px] font-mono text-muted-foreground/30 border-b border-r border-border/50 text-center bg-muted/60 backdrop-blur-sm select-none">
+                <th className="sticky left-0 z-30 w-10 px-2 py-1.5 text-[10px] font-mono text-muted-foreground/30 border-b border-r border-border/50 text-center bg-muted/70 backdrop-blur-sm select-none">
                   #
                 </th>
                 {headerGroup.headers.map((header) => (
@@ -273,7 +273,7 @@ function VirtualTable({ result }: { result: any }) {
             {/* Top padding row — replaces absolute translateY */}
             {paddingTop > 0 && (
               <tr>
-                <td style={{ height: paddingTop }} />
+                <td colSpan={columnNames.length + 1} style={{ height: paddingTop }} />
               </tr>
             )}
 
@@ -290,7 +290,7 @@ function VirtualTable({ result }: { result: any }) {
                   )}
                 >
                   {/* Row number cell */}
-                  <td className="w-10 px-2 py-1 text-center text-[10px] font-mono text-muted-foreground/25 border-b border-r border-border/20 select-none bg-muted/5">
+                  <td className="sticky left-0 z-20 w-10 px-2 py-1 text-center text-[10px] font-mono text-muted-foreground/25 border-b border-r border-border/20 select-none bg-background">
                     {virtualRow.index + 1}
                   </td>
                   {row.getVisibleCells().map((cell) => (
@@ -313,7 +313,7 @@ function VirtualTable({ result }: { result: any }) {
             {/* Bottom padding row */}
             {paddingBottom > 0 && (
               <tr>
-                <td style={{ height: paddingBottom }} />
+                <td colSpan={columnNames.length + 1} style={{ height: paddingBottom }} />
               </tr>
             )}
           </tbody>
