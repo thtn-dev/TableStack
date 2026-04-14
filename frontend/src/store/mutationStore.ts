@@ -36,6 +36,9 @@ interface MutationState {
   /** Row keys selected for bulk delete. */
   selectedRowKeys: Set<string>;
 
+  /** The row key that has keyboard focus (last clicked row). */
+  focusedRowKey: string | null;
+
   /** Which cell is being actively edited, if any. */
   editingCell: EditingCell | null;
 
@@ -87,11 +90,14 @@ interface MutationActions {
   /** Clear the active editing cell. */
   clearEditingCell: () => void;
 
-  // ── Row selection ─────────────────────────────────────────────────────────────
+  // ── Row selection & focus ─────────────────────────────────────────────────────
 
   toggleRowSelection: (rowKey: string) => void;
   selectAllRows: (rowKeys: string[]) => void;
   deselectAllRows: () => void;
+
+  /** Set the focused row (last clicked). Pass null to clear. */
+  setFocusedRow: (rowKey: string | null) => void;
 
   // ── Derived helpers ──────────────────────────────────────────────────────────
 
@@ -141,6 +147,7 @@ export const useMutationStore = create<MutationState & MutationActions>()(
 
       dirtyRows: new Map(),
       selectedRowKeys: new Set(),
+      focusedRowKey: null,
       editingCell: null,
       isSaving: false,
       isDeleting: false,
@@ -212,6 +219,12 @@ export const useMutationStore = create<MutationState & MutationActions>()(
       deselectAllRows: () => {
         set((s) => {
           s.selectedRowKeys.clear();
+        });
+      },
+
+      setFocusedRow: (rowKey) => {
+        set((s) => {
+          s.focusedRowKey = rowKey;
         });
       },
 
@@ -374,5 +387,8 @@ export const selectSelectedCount = (s: MutationState) =>
 
 /** Are there any dirty rows? */
 export const selectHasDirty = (s: MutationState) => s.dirtyRows.size > 0;
+
+/** The currently focused row key (last clicked). */
+export const selectFocusedRowKey = (s: MutationState) => s.focusedRowKey;
 
 export { buildRowKey };

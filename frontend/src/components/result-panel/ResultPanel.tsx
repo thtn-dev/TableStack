@@ -10,7 +10,6 @@ import {
   getCoreRowModel,
   flexRender,
   type ColumnDef,
-  type RowSelectionState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -20,15 +19,22 @@ import {
   Tick01Icon,
   Clock01Icon,
   Layers01Icon,
-  Delete01Icon,
   FloppyDiskIcon,
   Cancel01Icon,
   InformationCircleIcon,
+  Alert02Icon,
+  SourceCodeSquareIcon,
 } from "@hugeicons/core-free-icons";
 
 import { useDBStore, useEditorStore, toTableCacheKey } from "@/store";
 import type { DirtyRow } from "@/types/mutation";
-import { useMutationStore, selectHasDirty, selectSelectedCount, buildRowKey } from "@/store/mutationStore";
+import {
+  useMutationStore,
+  selectHasDirty,
+  selectSelectedCount,
+  selectFocusedRowKey,
+  buildRowKey,
+} from "@/store/mutationStore";
 import { extractPrimaryKeys } from "@/types/mutation";
 import type { QueryResult, AsyncState } from "@/store/types";
 import { Spinner } from "@/components/ui/spinner";
@@ -45,6 +51,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { EditableCell } from "./EditableCell";
+import { ScriptPreviewDialog } from "./ScriptPreviewDialog";
+import { generateUpdatePreview, generateDeletePreview } from "@/lib/sql-preview";
 import { toast } from "sonner";
 
 // Stable fallback — never recreated, so Zustand selector won't infinite-loop.
@@ -184,7 +192,7 @@ export function ResultPanel() {
                 {(data.columns ?? []).map((col: string, i: number) => (
                   <th
                     key={i}
-                    className="px-3 py-1.5 text-left text-[11px] font-semibold text-muted-foreground border-b border-r border-border/50 min-w-[120px] max-w-[320px] whitespace-nowrap select-none bg-muted/60"
+                    className="px-3 py-1.5 text-left text-[11px] font-semibold text-muted-foreground border-b border-r border-border/50 min-w-30 max-w-[320px] whitespace-nowrap select-none bg-muted/60"
                   >
                     {col}
                   </th>
@@ -279,8 +287,9 @@ function VirtualTable({
   table,
 }: VirtualTableProps) {
   const tableContainerRef = useRef<HTMLDivElement>(null);
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [conflictDeleteOpen, setConflictDeleteOpen] = useState(false);
+  const [scriptPreviewOpen, setScriptPreviewOpen] = useState(false);
 
   const activeTabId = useEditorStore((s) => s.activeTabId);
 
@@ -291,15 +300,13 @@ function VirtualTable({
     dirtyRows,
     editingCell,
     isSaving,
-    isDeleting,
     selectedRowKeys,
     setCellValue,
     clearAllDirty,
     clearEditingCell,
     setEditingCell,
-    toggleRowSelection,
-    selectAllRows,
     deselectAllRows,
+    setFocusedRow,
     saveChanges,
     deleteSelected,
     undoLastCellEdit,
@@ -307,15 +314,13 @@ function VirtualTable({
 
   const hasDirty = useMutationStore(selectHasDirty);
   const selectedCount = useMutationStore(selectSelectedCount);
+  const focusedRowKey = useMutationStore(selectFocusedRowKey);
 
   // ── Clear dirty state when new query result arrives ─────────────────────
-  // This fires when the VirtualTable remounts (key=data.duration changes),
-  // ensuring stale row keys from previous queries don't linger.
   useEffect(() => {
     clearAllDirty();
     deselectAllRows();
-    setRowSelection({});
-  // We intentionally only run this on mount (new result key)
+    setFocusedRow(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -329,25 +334,9 @@ function VirtualTable({
     [columnNames, pkColumns],
   );
 
-  // All visible row keys (used for select-all)
-  const allRowKeys = useMemo(
-    () =>
-      rawRows
-        .map(getRowKey)
-        .filter((k): k is string => k !== null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rawRows, columnNames, pkColumns],
-  );
-
-  const isAllSelected =
-    allRowKeys.length > 0 && allRowKeys.every((k) => selectedRowKeys.has(k));
-  const isIndeterminate =
-    !isAllSelected && allRowKeys.some((k) => selectedRowKeys.has(k));
-
   // ── Save + Delete handlers ───────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    // Snapshot before save — dirtyRows is cleared on success
     const rowsToSync: DirtyRow[] = Array.from(dirtyRows.values());
 
     if (rowsToSync.length > 1000) {
@@ -357,13 +346,10 @@ function VirtualTable({
     if (resp.success) {
       toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} saved`);
 
-      // Immediately apply the known changes to local state so the UI reflects
-      // new values without waiting for a DB round-trip.
       if (activeTabId) {
         useDBStore.getState().applyDirtyChangesToRows(activeTabId, pkColumns, rowsToSync);
       }
 
-      // Re-fetch each saved row to pick up server-side changes (triggers, defaults, etc.)
       if (activeTabId) {
         for (const row of rowsToSync) {
           try {
@@ -393,8 +379,8 @@ function VirtualTable({
 
   const handleDeleteConfirmed = useCallback(async () => {
     setDeleteConfirmOpen(false);
+    setConflictDeleteOpen(false);
 
-    // Snapshot selected PK maps before delete clears selectedRowKeys
     const pkValuesList = Array.from(
       useMutationStore.getState().selectedRowKeys
     ).map((key) => JSON.parse(key) as Record<string, unknown>);
@@ -405,9 +391,7 @@ function VirtualTable({
     const resp = await deleteSelected(connID, schema, table);
     if (resp.success) {
       toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} deleted`);
-      setRowSelection({});
 
-      // Remove deleted rows from local state — no re-fetch needed
       if (activeTabId) {
         useDBStore.getState().removeQueryRows(activeTabId, pkColumns, pkValuesList);
       }
@@ -420,36 +404,84 @@ function VirtualTable({
         toast.error(msg);
       }
     }
-  }, [deleteSelected, connID, schema, table, selectedCount, activeTabId, pkColumns]);
+  }, [deleteSelected, connID, schema, table, activeTabId, pkColumns]);
 
-  const handleToggleSelectAll = useCallback(() => {
-    if (isAllSelected) {
-      deselectAllRows();
-      setRowSelection({});
+  /**
+   * Try to initiate a delete for the current selection.
+   * If any selected row has unsaved edits, opens the conflict dialog instead.
+   */
+  const handleTriggerDelete = useCallback(() => {
+    const { selectedRowKeys: sel, dirtyRows: dr } = useMutationStore.getState();
+    if (sel.size === 0) return;
+    const hasConflict = [...sel].some((k) => dr.has(k));
+    if (hasConflict) {
+      setConflictDeleteOpen(true);
     } else {
-      selectAllRows(allRowKeys);
-      const next: RowSelectionState = {};
-      for (const k of allRowKeys) next[k] = true;
-      setRowSelection(next);
+      setDeleteConfirmOpen(true);
     }
-  }, [isAllSelected, allRowKeys, selectAllRows, deselectAllRows]);
+  }, []);
+
+  /**
+   * Cancel all pending changes: discard edits, deselect rows, clear focus.
+   */
+  const handleCancelAll = useCallback(() => {
+    clearAllDirty();
+    deselectAllRows();
+    setFocusedRow(null);
+  }, [clearAllDirty, deselectAllRows, setFocusedRow]);
+
+  /**
+   * Save all pending work in order: edits first, then deletes.
+   * If any selected row has unsaved edits, opens the conflict dialog first.
+   */
+  const handleSaveAll = useCallback(async () => {
+    const { selectedRowKeys: sel, dirtyRows: dr } = useMutationStore.getState();
+    const hasConflict = sel.size > 0 && [...sel].some((k) => dr.has(k));
+    if (hasConflict) {
+      setConflictDeleteOpen(true);
+      return;
+    }
+    if (dr.size > 0) {
+      await handleSave();
+    }
+    // Re-read state after save (save clears dirtyRows on success)
+    const { selectedRowKeys: selAfter } = useMutationStore.getState();
+    if (selAfter.size > 0) {
+      await handleDeleteConfirmed();
+    }
+  }, [handleSave, handleDeleteConfirmed]);
+
+  // ── Script preview SQL ───────────────────────────────────────────────────
+
+  const updateSQL = useMemo(
+    () => generateUpdatePreview(schema, table, dirtyRows),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [schema, table, dirtyRows.size],
+  );
+
+  const deleteSQL = useMemo(() => {
+    if (selectedRowKeys.size === 0) return "";
+    const pkList = Array.from(selectedRowKeys).map(
+      (k) => JSON.parse(k) as Record<string, unknown>
+    );
+    return generateDeletePreview(schema, table, pkList);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schema, table, selectedRowKeys.size]);
 
   // ── Keyboard shortcuts ───────────────────────────────────────────────────
-  // Uses capture phase so Ctrl+S fires before MainWindow's file-save handler
-  // when the result grid has unsaved dirty rows.
   useEffect(() => {
     if (!editEnabled) return;
 
     function handleKeyDown(e: KeyboardEvent) {
       const ctrl = e.ctrlKey || e.metaKey;
 
-      // Ctrl+S — save grid changes (intercept before MainWindow file-save)
+      // Ctrl+S — save grid changes (edits + pending deletes)
       if (ctrl && e.key === "s" && !e.shiftKey) {
-        const { dirtyRows: dr } = useMutationStore.getState();
-        if (dr.size > 0) {
+        const { dirtyRows: dr, selectedRowKeys: sel } = useMutationStore.getState();
+        if (dr.size > 0 || sel.size > 0) {
           e.preventDefault();
           e.stopPropagation();
-          void handleSave();
+          void handleSaveAll();
         }
         return;
       }
@@ -464,19 +496,17 @@ function VirtualTable({
         }
       }
 
-      // Delete / Backspace — delete selected rows
-      if ((e.key === "Delete" || e.key === "Backspace") && !ctrl) {
-        const { selectedRowKeys: sel } = useMutationStore.getState();
-        // Only trigger if a cell is not being edited
-        const { editingCell: ec } = useMutationStore.getState();
-        if (sel.size > 0 && !ec) {
+      // Delete — toggle the focused row's mark-for-deletion (no dialog; Save executes)
+      if (e.key === "Delete" && !ctrl) {
+        const { focusedRowKey: focused, editingCell: ec } = useMutationStore.getState();
+        if (ec) return; // A cell is being edited — let the input handle it
+        if (focused) {
           e.preventDefault();
-          setDeleteConfirmOpen(true);
-          return;
+          useMutationStore.getState().toggleRowSelection(focused);
         }
       }
 
-      // Escape — cancel editing or deselect all
+      // Escape — cancel editing or deselect / unfocus
       if (e.key === "Escape") {
         const { editingCell: ec, selectedRowKeys: sel } = useMutationStore.getState();
         if (ec) {
@@ -485,14 +515,15 @@ function VirtualTable({
         }
         if (sel.size > 0) {
           deselectAllRows();
-          setRowSelection({});
+          return;
         }
+        setFocusedRow(null);
       }
     }
 
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, [editEnabled, handleSave, undoLastCellEdit, clearEditingCell, deselectAllRows]);
+  }, [editEnabled, handleSave, handleTriggerDelete, undoLastCellEdit, clearEditingCell, deselectAllRows, setFocusedRow]);
 
   // ── Column definitions ───────────────────────────────────────────────────
 
@@ -505,7 +536,6 @@ function VirtualTable({
         cell: ({ row, getValue }: any) => {
           const val = getValue();
           if (!editEnabled) {
-            // Read-only rendering (no table selected or no PK)
             if (val === null || val === undefined)
               return (
                 <span className="text-muted-foreground/30 italic text-[11px]">
@@ -523,7 +553,6 @@ function VirtualTable({
 
           const rowKey = getRowKey(row.original);
           if (!rowKey) {
-            // Can't compute row key — fallback to read-only
             if (val === null || val === undefined)
               return <span className="text-muted-foreground/30 italic text-[11px]">NULL</span>;
             return <span className="text-[12px]">{String(val)}</span>;
@@ -582,9 +611,6 @@ function VirtualTable({
     data: rawRows,
     columns: colDefs,
     getCoreRowModel: getCoreRowModel(),
-    state: { rowSelection },
-    onRowSelectionChange: setRowSelection,
-    enableRowSelection: editEnabled,
     getRowId: (row, index) => getRowKey(row) ?? String(index),
   });
 
@@ -610,34 +636,6 @@ function VirtualTable({
 
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden">
-      {/* ── Selection toolbar (shown when rows are selected) ─────────────── */}
-      {editEnabled && selectedCount > 0 && (
-        <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-destructive/5 border-b border-destructive/20 text-[11px]">
-          <span className="text-destructive font-medium">
-            {selectedCount} row{selectedCount !== 1 ? "s" : ""} selected
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 px-2 text-[11px] text-muted-foreground"
-              onClick={() => { deselectAllRows(); setRowSelection({}); }}
-            >
-              Deselect all
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              className="h-6 px-2 text-[11px] gap-1"
-              disabled={isDeleting}
-              onClick={() => setDeleteConfirmOpen(true)}
-            >
-              <HugeiconsIcon icon={Delete01Icon} size={12} />
-              {isDeleting ? "Deleting…" : `Delete ${selectedCount}`}
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* ── Scrollable table ──────────────────────────────────────────────── */}
       <div ref={tableContainerRef} className="flex-1 overflow-auto">
@@ -653,26 +651,11 @@ function VirtualTable({
                 <th className="sticky left-0 z-30 w-10 px-2 py-1.5 text-[10px] font-mono text-muted-foreground/30 border-b border-r border-border/50 text-center bg-muted/70 backdrop-blur-sm select-none">
                   #
                 </th>
-                {/* Select-all checkbox */}
-                {editEnabled && (
-                  <th className="w-8 px-2 py-1.5 border-b border-r border-border/50 bg-muted/60 backdrop-blur-sm select-none">
-                    <input
-                      type="checkbox"
-                      aria-label="Select all rows"
-                      checked={isAllSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = isIndeterminate;
-                      }}
-                      onChange={handleToggleSelectAll}
-                      className="cursor-pointer accent-primary"
-                    />
-                  </th>
-                )}
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
                     className={cn(
-                      "px-3 py-1.5 text-left text-[11px] font-semibold text-muted-foreground border-b border-r border-border/50 min-w-[120px] max-w-[320px] whitespace-nowrap select-none bg-muted/60 backdrop-blur-sm",
+                      "px-3 py-1.5 text-left text-[11px] font-semibold text-muted-foreground border-b border-r border-border/50 min-w-30 max-w-[320px] whitespace-nowrap select-none bg-muted/60 backdrop-blur-sm",
                       pkColumns.includes(header.column.id.replace(/_\d+$/, "")) &&
                         "text-primary/70",
                     )}
@@ -703,54 +686,53 @@ function VirtualTable({
               const row = rows[virtualRow.index];
               const rowKey = getRowKey(row.original);
               const isSelected = rowKey ? selectedRowKeys.has(rowKey) : false;
+              const isFocused = rowKey ? rowKey === focusedRowKey : false;
               const isRowDirty = rowKey ? dirtyRows.has(rowKey) : false;
+              const hasConflict = isSelected && isRowDirty;
 
               return (
                 <tr
                   key={row.id}
                   className={cn(
-                    "hover:bg-muted/70 transition-colors",
-                    isSelected && "bg-destructive/5",
-                    !isSelected && isRowDirty && "bg-yellow-500/5",
-                    !isSelected &&
-                      !isRowDirty &&
-                      virtualRow.index % 2 !== 0 &&
-                      "bg-muted/50",
+                    "transition-colors",
+                    editEnabled && "cursor-pointer",
+                    isSelected
+                      ? "bg-destructive/8 hover:bg-destructive/12"
+                      : isFocused
+                      ? "bg-primary/5 hover:bg-primary/8"
+                      : isRowDirty
+                      ? "bg-yellow-500/5 hover:bg-yellow-500/10"
+                      : virtualRow.index % 2 !== 0
+                      ? "bg-muted/50 hover:bg-muted/70"
+                      : "hover:bg-muted/70",
                   )}
+                  onClick={() => {
+                    if (!editEnabled || !rowKey) return;
+                    setFocusedRow(rowKey);
+                  }}
                 >
-                  {/* Row number cell */}
-                  <td className="sticky left-0 z-20 w-10 px-2 py-1 text-center text-[10px] font-mono text-muted-foreground/25 border-b border-r border-border/20 select-none bg-background">
-                    {virtualRow.index + 1}
-                  </td>
-
-                  {/* Row checkbox */}
-                  {editEnabled && (
-                    <td className="w-8 px-2 py-1 border-b border-r border-border/20 bg-muted/5">
-                      {rowKey && (
-                        <input
-                          type="checkbox"
-                          aria-label={`Select row ${virtualRow.index + 1}`}
-                          checked={isSelected}
-                          onChange={() => {
-                            toggleRowSelection(rowKey);
-                            setRowSelection((prev) => {
-                              const next = { ...prev };
-                              if (isSelected) delete next[rowKey];
-                              else next[rowKey] = true;
-                              return next;
-                            });
-                          }}
-                          className="cursor-pointer accent-primary"
+                  {/* Row number cell — shows conflict icon when row is both dirty+selected */}
+                  <td className="sticky left-0 z-20 w-10 px-2 py-1 text-center text-[10px] font-mono border-b border-r border-border/20 select-none bg-background">
+                    {hasConflict ? (
+                      <span title="This row has unsaved edits and is selected for deletion">
+                        <HugeiconsIcon
+                          icon={Alert02Icon}
+                          size={11}
+                          className="text-amber-500 mx-auto"
                         />
-                      )}
-                    </td>
-                  )}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/25">
+                        {virtualRow.index + 1}
+                      </span>
+                    )}
+                  </td>
 
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
                       className={cn(
-                        "px-3 py-1 border-b border-r border-border/10 min-w-[120px] max-w-[320px]",
+                        "px-3 py-1 border-b border-r border-border/10 min-w-30 max-w-[320px]",
                       )}
                     >
                       {flexRender(
@@ -791,7 +773,7 @@ function VirtualTable({
         <div className="flex items-center gap-3">
           {editEnabled && (
             <span className="opacity-30 text-[10px]">
-              Double-click to edit · Ctrl+S save · Ctrl+Z undo
+              Click to focus · Delete to mark for deletion · Double-click to edit · Ctrl+S save · Ctrl+Z undo
             </span>
           )}
           <span className="opacity-40 italic lowercase text-[10px]">
@@ -800,11 +782,16 @@ function VirtualTable({
         </div>
       </div>
 
-      {/* ── Dirty rows action bar (floating at bottom) ─────────────────────── */}
-      {editEnabled && hasDirty && (
+      {/* ── Unified action bar (edits + pending deletes) ──────────────────── */}
+      {editEnabled && (hasDirty || selectedCount > 0) && (
         <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-background border-t-2 border-primary/30 shadow-lg">
           <span className="text-[11px] font-medium text-muted-foreground">
-            {dirtyRows.size} row{dirtyRows.size !== 1 ? "s" : ""} modified
+            {[
+              hasDirty && `${dirtyRows.size} edit${dirtyRows.size !== 1 ? "s" : ""}`,
+              selectedCount > 0 && `${selectedCount} row${selectedCount !== 1 ? "s" : ""} to delete`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -812,16 +799,26 @@ function VirtualTable({
               variant="ghost"
               className="h-7 px-3 text-[11px] gap-1.5 text-muted-foreground"
               disabled={isSaving}
-              onClick={() => clearAllDirty()}
+              onClick={() => setScriptPreviewOpen(true)}
+            >
+              <HugeiconsIcon icon={SourceCodeSquareIcon} size={12} />
+              Preview script
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-3 text-[11px] gap-1.5 text-muted-foreground"
+              disabled={isSaving}
+              onClick={handleCancelAll}
             >
               <HugeiconsIcon icon={Cancel01Icon} size={12} />
-              Discard
+              Cancel
             </Button>
             <Button
               size="sm"
               className="h-7 px-3 text-[11px] gap-1.5"
               disabled={isSaving}
-              onClick={handleSave}
+              onClick={() => void handleSaveAll()}
             >
               {isSaving ? (
                 <>
@@ -831,7 +828,7 @@ function VirtualTable({
               ) : (
                 <>
                   <HugeiconsIcon icon={FloppyDiskIcon} size={12} />
-                  Save changes
+                  Save
                 </>
               )}
             </Button>
@@ -839,11 +836,13 @@ function VirtualTable({
         </div>
       )}
 
-      {/* ── Delete confirmation dialog ─────────────────────────────────────── */}
+      {/* ── Standard delete confirmation dialog ───────────────────────────── */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {selectedCount} row{selectedCount !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete {selectedCount} row{selectedCount !== 1 ? "s" : ""}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete the selected{" "}
               {selectedCount === 1 ? "row" : `${selectedCount} rows`} from{" "}
@@ -862,6 +861,44 @@ function VirtualTable({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Conflict delete dialog (row has unsaved edits) ─────────────────── */}
+      <AlertDialog open={conflictDeleteOpen} onOpenChange={setConflictDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <HugeiconsIcon icon={Alert02Icon} size={18} className="text-amber-500" />
+              Unsaved edits will be discarded
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              One or more of the selected rows have unsaved changes.
+              Deleting them will permanently discard those edits.
+              <br /><br />
+              You can <strong>cancel</strong> to save your edits first, or proceed to{" "}
+              <strong>discard edits and delete</strong>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteConfirmed}
+            >
+              Discard edits &amp; delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Script preview dialog ─────────────────────────────────────────── */}
+      <ScriptPreviewDialog
+        open={scriptPreviewOpen}
+        onOpenChange={setScriptPreviewOpen}
+        updateSQL={updateSQL || undefined}
+        deleteSQL={deleteSQL || undefined}
+        schema={schema}
+        table={table}
+      />
     </div>
   );
 }
