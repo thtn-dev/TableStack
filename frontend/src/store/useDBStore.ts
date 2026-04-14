@@ -127,6 +127,19 @@ interface DBActions {
     pkValuesList: Record<string, unknown>[],
   ) => void;
   /**
+   * Immediately apply known dirty-row changes to the cached result rows.
+   * Called right after a successful save so the UI reflects new values without
+   * waiting for a DB round-trip.
+   */
+  applyDirtyChangesToRows: (
+    tabId: string,
+    pkColumns: string[],
+    dirtyRowsList: Array<{
+      primaryKeys: Record<string, unknown>;
+      changes: Record<string, { newValue: unknown }>;
+    }>,
+  ) => void;
+  /**
    * Re-fetch a single row from the DB and patch local state.
    * Returns 'patched' when the row was updated, or 'gone' when the row no
    * longer exists (also removes it from local state automatically).
@@ -509,6 +522,36 @@ export const useDBStore = create<DBState & DBActions>()(
             const key = pkColumns.map((_, j) => String(row[pkIndices[j]])).join("\0");
             return !toRemove.has(key);
           });
+        });
+      },
+
+      applyDirtyChangesToRows: (tabId, pkColumns, dirtyRowsList) => {
+        set((s) => {
+          const resultState = s.queryResults[tabId];
+          if (!resultState?.data?.rows?.length) return;
+
+          const origCols = resultState.data.columns;
+          const pkIndices = pkColumns.map((pk) => origCols.indexOf(pk));
+          if (pkIndices.some((i) => i === -1)) return;
+
+          for (const dirtyRow of dirtyRowsList) {
+            const rowIdx = resultState.data.rows.findIndex((row) =>
+              pkColumns.every(
+                (pk, j) =>
+                  String(row[pkIndices[j]]) === String(dirtyRow.primaryKeys[pk]),
+              ),
+            );
+            if (rowIdx === -1) continue;
+
+            for (const [column, { newValue }] of Object.entries(
+              dirtyRow.changes,
+            )) {
+              const colIdx = origCols.indexOf(column);
+              if (colIdx !== -1) {
+                resultState.data.rows[rowIdx][colIdx] = newValue;
+              }
+            }
+          }
         });
       },
 

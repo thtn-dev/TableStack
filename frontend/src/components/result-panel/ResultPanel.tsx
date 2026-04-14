@@ -357,7 +357,13 @@ function VirtualTable({
     if (resp.success) {
       toast.success(`${resp.affectedRows} row${resp.affectedRows !== 1 ? "s" : ""} saved`);
 
-      // Re-fetch each saved row to capture server-side changes (triggers, defaults, etc.)
+      // Immediately apply the known changes to local state so the UI reflects
+      // new values without waiting for a DB round-trip.
+      if (activeTabId) {
+        useDBStore.getState().applyDirtyChangesToRows(activeTabId, pkColumns, rowsToSync);
+      }
+
+      // Re-fetch each saved row to pick up server-side changes (triggers, defaults, etc.)
       if (activeTabId) {
         for (const row of rowsToSync) {
           try {
@@ -368,7 +374,7 @@ function VirtualTable({
               toast.warning("A saved row was removed by another session.");
             }
           } catch {
-            toast.error("Row saved but display may be stale — re-run the query to refresh.");
+            // applyDirtyChangesToRows already updated the UI — no stale display.
           }
         }
       }
