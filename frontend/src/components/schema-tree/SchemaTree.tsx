@@ -1,32 +1,19 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  DatabaseIcon,
-  FolderIcon,
-  FolderOpenIcon,
   Table01Icon,
   ViewIcon,
+  FolderIcon,
+  FolderOpenIcon,
   ArrowRight01Icon,
   RefreshIcon,
-  Add01Icon,
-  MoreHorizontalIcon,
-  Logout01Icon,
-  Login01Icon,
-  Delete02Icon,
-  PencilEdit01Icon,
-  AlertCircleIcon,
+  DatabaseIcon,
+  WifiDisconnected02Icon,
 } from "@hugeicons/core-free-icons";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -34,8 +21,7 @@ import {
 } from "@/components/ui/tooltip";
 
 import { useDBStore, useEditorStore, selectSchemaNode } from "@/store";
-import type { Profile, TableInfo, TableRef } from "@/store";
-import { ConnectionDialog } from "@/components/connection";
+import type { TableInfo, TableRef } from "@/store";
 import { useSchemaTree } from "./useSchemaTree";
 import { cn } from "@/lib/utils";
 
@@ -68,16 +54,6 @@ function Chevron({ open }: { open: boolean }) {
         open && "rotate-90",
       )}
     />
-  );
-}
-
-// ── Section label ─────────────────────────────────────────────────────────────
-
-function SectionLabel({ label }: { label: string }) {
-  return (
-    <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 select-none">
-      {label}
-    </p>
   );
 }
 
@@ -173,22 +149,18 @@ function TableNode({
   const executeQuery = useDBStore((s) => s.executeQuery);
 
   const handleDoubleClick = useCallback(() => {
-    // Activate the table (column cache + highlight)
     onSelect({ profileId, schema: table.schema, table: table.name });
-    
-    // Auto-generate ID to link the tab and the query
+
     const tabId = crypto.randomUUID();
     const content = `SELECT *\nFROM "${table.schema}"."${table.name}"\nLIMIT 100;`;
-    
-    // Open a new tab with the default SELECT query
+
     addTab({
       id: tabId,
       title: table.name,
       content,
       connectionId: profileId,
     });
-    
-    // Automatically execute the query
+
     void executeQuery(profileId, content, tabId);
   }, [addTab, executeQuery, onSelect, table.name, table.schema, profileId]);
 
@@ -284,277 +256,6 @@ function SchemaNode({
   );
 }
 
-// ── Profile context menu ──────────────────────────────────────────────────────
-
-interface ProfileMenuProps {
-  profile: Profile;
-  isConnected: boolean;
-  onConnect: () => void;
-  onDisconnect: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onRefresh: () => void;
-}
-
-function ProfileMenu({
-  profile,
-  isConnected,
-  onConnect,
-  onDisconnect,
-  onEdit,
-  onDelete,
-  onRefresh,
-}: ProfileMenuProps) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          aria-label={`Options for ${profile.name}`}
-          id={`profile-menu-${profile.id}`}
-          onClick={(e) => e.stopPropagation()}
-          className={cn(
-            "flex h-5 w-5 items-center justify-center rounded",
-            "text-muted-foreground hover:bg-muted hover:text-foreground",
-            "transition-colors",
-          )}
-        >
-          <HugeiconsIcon icon={MoreHorizontalIcon} size={12} />
-        </button>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent align="end" className="w-40">
-        {isConnected ? (
-          <>
-            <DropdownMenuItem
-              id={`profile-refresh-${profile.id}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRefresh();
-              }}
-            >
-              <HugeiconsIcon icon={RefreshIcon} size={13} />
-              Refresh
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              id={`profile-disconnect-${profile.id}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDisconnect();
-              }}
-            >
-              <HugeiconsIcon icon={Logout01Icon} size={13} />
-              Disconnect
-            </DropdownMenuItem>
-          </>
-        ) : (
-          <DropdownMenuItem
-            id={`profile-connect-${profile.id}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onConnect();
-            }}
-          >
-            <HugeiconsIcon icon={Login01Icon} size={13} />
-            Connect
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          id={`profile-edit-${profile.id}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-        >
-          <HugeiconsIcon icon={PencilEdit01Icon} size={13} />
-          Edit
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          id={`profile-delete-${profile.id}`}
-          variant="destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          <HugeiconsIcon icon={Delete02Icon} size={13} />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-// ── Profile node ──────────────────────────────────────────────────────────────
-
-interface ProfileNodeProps {
-  profile: Profile;
-  depth: number;
-  isExpanded: boolean;
-  selectedTable: TableRef | null;
-  onToggle: () => void;
-  onSelectTable: (ref: TableRef) => void;
-  onEditProfile: (profile: Profile) => void;
-}
-
-function ProfileNode({
-  profile,
-  depth,
-  isExpanded,
-  selectedTable,
-  onToggle,
-  onSelectTable,
-  onEditProfile,
-}: ProfileNodeProps) {
-  const connect = useDBStore((s) => s.connect);
-  const disconnect = useDBStore((s) => s.disconnect);
-  const deleteProfile = useDBStore((s) => s.deleteProfile);
-  const loadSchemaTree = useDBStore((s) => s.loadSchemaTree);
-
-  const isConnected = useDBStore((s) => s.activeConnections.has(profile.id));
-  const isConnecting = useDBStore((s) => s.connectingIds.has(profile.id));
-  const isTreeLoading = useDBStore(
-    (s) => s.schemaTreeLoading[profile.id] ?? false,
-  );
-  const schemaNode = useDBStore(selectSchemaNode(profile.id));
-
-  const [connectError, setConnectError] = useState<string | null>(null);
-
-  const handleConnect = useCallback(async () => {
-    setConnectError(null);
-    try {
-      await connect(profile.id);
-    } catch (err) {
-      setConnectError(String(err));
-    }
-  }, [connect, profile.id]);
-
-  const handleDisconnect = useCallback(async () => {
-    await disconnect(profile.id);
-  }, [disconnect, profile.id]);
-
-  const handleRefresh = useCallback(async () => {
-    await loadSchemaTree(profile.id);
-  }, [loadSchemaTree, profile.id]);
-
-  const handleDelete = useCallback(async () => {
-    await deleteProfile(profile.id);
-  }, [deleteProfile, profile.id]);
-
-  // (Parent ProfileNode controls expand state; no local effect needed here)
-
-  // Status indicator dot
-  const statusDot = isConnected ? (
-    <span className="block h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-  ) : (
-    <span className="block h-1.5 w-1.5 rounded-full bg-muted-foreground/30 shrink-0" />
-  );
-
-  const tagColor = profile.tag?.color || "#6B7280";
-  const tagName = profile.tag?.name || "Default";
-
-  return (
-    <>
-      <TreeRow
-        id={`tree-profile-${profile.id}`}
-        depth={depth}
-        icon={
-          isConnecting || isTreeLoading ? (
-            <Spinner className="size-3.5 text-muted-foreground" />
-          ) : (
-            <div className="relative flex items-center justify-center">
-              <HugeiconsIcon
-                icon={DatabaseIcon}
-                size={13}
-                style={{ color: isConnected ? tagColor : undefined }}
-                className={cn(
-                  !isConnected && "text-muted-foreground",
-                )}
-              />
-              <span className="absolute -bottom-0.5 -right-0.5">
-                {statusDot}
-              </span>
-            </div>
-          )
-        }
-        label={
-          <span className="flex items-center gap-1.5 min-w-0">
-            <span
-              className="inline-block h-2 w-2 shrink-0 rounded-sm"
-              style={{ backgroundColor: tagColor }}
-              title={tagName}
-            />
-            <span className="truncate">{profile.name}</span>
-          </span>
-        }
-        isExpandable={isConnected}
-        isExpanded={isExpanded}
-        onClick={() => {
-          if (isConnected) {
-            onToggle();
-          } else if (!isConnecting) {
-            handleConnect();
-          }
-        }}
-        actions={
-          <ProfileMenu
-            profile={profile}
-            isConnected={isConnected}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-            onEdit={() => onEditProfile(profile)}
-            onDelete={handleDelete}
-            onRefresh={handleRefresh}
-          />
-        }
-      />
-
-      {/* Connection error inline */}
-      {connectError && (
-        <div
-          className="mx-2 mb-1 flex items-start gap-1.5 rounded-md bg-destructive/10 px-2 py-1.5 text-[11px] text-destructive"
-          style={{ marginLeft: `${8 + depth * 14 + 11 + 6}px` }}
-        >
-          <HugeiconsIcon
-            icon={AlertCircleIcon}
-            size={12}
-            className="mt-px shrink-0"
-          />
-          <span className="break-all">{connectError}</span>
-        </div>
-      )}
-
-      {/* Schema tree when connected + expanded */}
-      {isConnected && isExpanded && (
-        <>
-          {isTreeLoading ? (
-            <div
-              className="flex items-center gap-2 py-2 text-[11px] text-muted-foreground"
-              style={{ paddingLeft: `${8 + (depth + 1) * 14 + 4}px` }}
-            >
-              <Spinner className="size-3 text-muted-foreground/60" />
-              <span>Loading schema…</span>
-            </div>
-          ) : schemaNode ? (
-            schemaNode.schemas.map((schema) => (
-              <SchemaNodeWrapper
-                key={schema}
-                schema={schema}
-                tables={schemaNode.tablesBySchema[schema] ?? []}
-                profileId={profile.id}
-                depth={depth + 1}
-                selectedTable={selectedTable}
-                onSelectTable={onSelectTable}
-              />
-            ))
-          ) : null}
-        </>
-      )}
-    </>
-  );
-}
-
 // ── Schema node wrapper with local expansion ──────────────────────────────────
 
 interface SchemaNodeWrapperProps {
@@ -574,12 +275,9 @@ function SchemaNodeWrapper({
   selectedTable,
   onSelectTable,
 }: SchemaNodeWrapperProps) {
-  // Stable default — useMemo prevents a new array literal on every render,
-  // which would otherwise cause useSchemaTree's useState initializer to see
-  // a different reference and trigger unnecessary work downstream.
   const defaultExpanded = useMemo(
     () => (schema === "public" ? [`${profileId}::${schema}`] : []),
-    [schema, profileId]
+    [schema, profileId],
   );
 
   const { isExpanded, toggle } = useSchemaTree(defaultExpanded);
@@ -600,65 +298,38 @@ function SchemaNodeWrapper({
 }
 
 // =============================================================================
-// Main SchemaTree component
+// Main SchemaTree component — shows the active profile's schema tree only
 // =============================================================================
 
-// Stable empty array — used as fallback when profiles.data is null to avoid
-// returning a new [] reference from the Zustand selector on every render.
-const EMPTY_PROFILES: Profile[] = [];
-
 export function SchemaTree() {
-  // profiles.data can be null before first load; don't use `?? []` inside the
-  // selector because that creates a new array reference on every call (infinite loop).
-  const profilesData = useDBStore((s) => s.profiles.data);
-  const profiles = profilesData ?? EMPTY_PROFILES;
+  const activeProfileId = useDBStore((s) => s.activeProfileId);
+  const isConnected = useDBStore((s) =>
+    Boolean(activeProfileId && s.activeConnections.has(activeProfileId)),
+  );
+  const isConnecting = useDBStore((s) =>
+    Boolean(activeProfileId && s.connectingIds.has(activeProfileId)),
+  );
+  const isTreeLoading = useDBStore(
+    (s) => (activeProfileId ? (s.schemaTreeLoading[activeProfileId] ?? false) : false),
+  );
+  const schemaNode = useDBStore(
+    activeProfileId ? selectSchemaNode(activeProfileId) : () => null,
+  );
 
-  const profilesStatus = useDBStore((s) => s.profiles.status);
-  const loadProfiles = useDBStore((s) => s.loadProfiles);
   const selectedTable = useDBStore((s) => s.selectedTable);
   const selectTable = useDBStore((s) => s.selectTable);
+  const loadSchemaTree = useDBStore((s) => s.loadSchemaTree);
+  const connect = useDBStore((s) => s.connect);
 
-  const { isExpanded, toggle, expand } = useSchemaTree();
+  const { isExpanded, expand } = useSchemaTree();
 
-  // Dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editProfile, setEditProfile] = useState<Profile | undefined>(
-    undefined,
-  );
-
-  // Subscribe to a serialised string of active IDs so the effect only re-runs
-  // when the actual set of connected profiles changes — not on every immer update
-  // (which creates a new Set reference even when contents are identical).
-  const activeConnectionsKey = useDBStore((s) =>
-    [...s.activeConnections].sort().join(","),
-  );
-
-  // Auto-expand newly connected profiles
+  // Auto-expand when the active profile connects
   useEffect(() => {
-    if (!activeConnectionsKey) return;
-    activeConnectionsKey.split(",").forEach((id) => {
-      if (id) expand(id);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConnectionsKey]); // `expand` is stable; intentionally omitted to avoid stale closure issues
-
-  const handleNewConnection = () => {
-    setEditProfile(undefined);
-    setDialogOpen(true);
-  };
-
-  const handleEditProfile = (profile: Profile) => {
-    setEditProfile(profile);
-    setDialogOpen(true);
-  };
-
-  const handleDialogClose = async (open: boolean) => {
-    setDialogOpen(open);
-    if (!open) {
-      // Refresh profile list after dialog closes
-      await loadProfiles();
+    if (activeProfileId && isConnected) {
+      expand(activeProfileId);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, activeProfileId]);
 
   return (
     <div
@@ -672,111 +343,105 @@ export function SchemaTree() {
           Explorer
         </span>
 
-        <div className="flex items-center gap-0.5">
+        {isConnected && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 size="icon-sm"
                 variant="ghost"
-                id="sidebar-refresh-profiles"
-                aria-label="Refresh profiles"
-                onClick={() => loadProfiles()}
-                disabled={profilesStatus === "loading"}
+                id="sidebar-refresh-schema"
+                aria-label="Refresh schema"
+                onClick={() => activeProfileId && void loadSchemaTree(activeProfileId)}
+                disabled={isTreeLoading}
               >
-                {profilesStatus === "loading" ? (
+                {isTreeLoading ? (
                   <Spinner className="size-3" />
                 ) : (
                   <HugeiconsIcon icon={RefreshIcon} size={12} />
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">Refresh</TooltipContent>
+            <TooltipContent side="right">Refresh schema</TooltipContent>
           </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                id="sidebar-new-connection"
-                aria-label="New connection"
-                onClick={handleNewConnection}
-              >
-                <HugeiconsIcon icon={Add01Icon} size={12} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">New Connection</TooltipContent>
-          </Tooltip>
-        </div>
+        )}
       </div>
 
       {/* ── Body ── */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="py-1 px-1" role="group">
-          {/* Loading state */}
-          {profilesStatus === "loading" && profiles.length === 0 && (
-            <div className="flex items-center gap-2 px-3 py-3 text-[11px] text-muted-foreground">
-              <Spinner className="size-3.5" />
-              <span>Loading connections…</span>
-            </div>
-          )}
 
-          {/* Empty state */}
-          {profilesStatus !== "loading" && profiles.length === 0 && (
-            <div className="flex flex-col items-center gap-2.5 px-3 py-6 text-center">
+          {/* No active profile */}
+          {!activeProfileId && (
+            <div className="flex flex-col items-center gap-2.5 px-3 py-6 text-center select-none">
               <HugeiconsIcon
                 icon={DatabaseIcon}
                 size={28}
                 className="text-muted-foreground/20"
               />
-              <div className="flex flex-col gap-1">
-                <p className="text-[12px] font-medium text-muted-foreground/70">
-                  No connections yet
-                </p>
-                <p className="text-[11px] text-muted-foreground/50">
-                  Click + to add your first DB
-                </p>
-              </div>
+              <p className="text-[11px] text-muted-foreground/50">
+                Select a connection from the sidebar
+              </p>
+            </div>
+          )}
+
+          {/* Active profile but not connected */}
+          {activeProfileId && !isConnected && !isConnecting && (
+            <div className="flex flex-col items-center gap-3 px-3 py-6 text-center select-none">
+              <HugeiconsIcon
+                icon={WifiDisconnected02Icon}
+                size={28}
+                className="text-muted-foreground/20"
+              />
+              <p className="text-[11px] text-muted-foreground/50">
+                Not connected
+              </p>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={handleNewConnection}
-                id="sidebar-new-connection-empty"
-                className="mt-1 gap-1.5 text-xs"
+                className="text-xs h-7 px-3"
+                onClick={() => void connect(activeProfileId)}
               >
-                <HugeiconsIcon icon={Add01Icon} size={12} />
-                New Connection
+                Connect
               </Button>
             </div>
           )}
 
-          {/* Profile list */}
-          {profiles.length > 0 && (
-            <>
-              <SectionLabel label="Connections" />
-              {profiles.map((profile) => (
-                <ProfileNode
-                  key={profile.id}
-                  profile={profile}
-                  depth={0}
-                  isExpanded={isExpanded(profile.id)}
-                  selectedTable={selectedTable}
-                  onToggle={() => toggle(profile.id)}
-                  onSelectTable={selectTable}
-                  onEditProfile={handleEditProfile}
-                />
-              ))}
-            </>
+          {/* Connecting spinner */}
+          {activeProfileId && isConnecting && (
+            <div className="flex items-center gap-2 px-3 py-3 text-[11px] text-muted-foreground">
+              <Spinner className="size-3.5" />
+              <span>Connecting…</span>
+            </div>
           )}
+
+          {/* Schema tree loading */}
+          {activeProfileId && isConnected && isTreeLoading && !schemaNode && (
+            <div
+              className="flex items-center gap-2 py-2 text-[11px] text-muted-foreground"
+              style={{ paddingLeft: "22px" }}
+            >
+              <Spinner className="size-3 text-muted-foreground/60" />
+              <span>Loading schema…</span>
+            </div>
+          )}
+
+          {/* Schema tree */}
+          {activeProfileId && isConnected && schemaNode && (
+            schemaNode.schemas.map((schema) => (
+              <SchemaNodeWrapper
+                key={schema}
+                schema={schema}
+                tables={schemaNode.tablesBySchema[schema] ?? []}
+                profileId={activeProfileId}
+                depth={0}
+                selectedTable={selectedTable}
+                onSelectTable={selectTable}
+              />
+            ))
+          )}
+
         </div>
       </ScrollArea>
-
-      {/* ── Connection dialog ── */}
-      <ConnectionDialog
-        open={dialogOpen}
-        onOpenChange={handleDialogClose}
-        editProfile={editProfile}
-      />
     </div>
   );
 }

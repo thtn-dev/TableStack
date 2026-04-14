@@ -8,20 +8,10 @@ import {
   Menu01Icon,
   Settings01Icon,
   SidebarRight01Icon,
-  ArrowDown01Icon,
-  WifiDisconnected01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@/lib/utils";
 import { Application, System, Window } from "@wailsio/runtime";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { SettingsDialog } from "@/components/settings";
 import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
@@ -45,7 +35,6 @@ interface TitleBarProps {
   rightSidebarOpen?: boolean;
   onToggleRightSidebar?: () => void;
   showRightToolbar?: boolean;
-  showCenterDropdown?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,124 +86,40 @@ function LeftSidebarToggle({ open, onToggle }: LeftSidebarToggleProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Center — active profile name label
 // ---------------------------------------------------------------------------
 
-/** Returns a dot color for the profile: first tag hex color, or driver fallback. */
-function profileDotColor(driver: string, tagColor?: string): string {
-  if (tagColor) return tagColor;
-  switch (driver) {
-    case "postgres": return "#3b82f6"; // blue-500
-    case "mysql":    return "#f97316"; // orange-500
-    default:         return "#6b7280"; // gray-500
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Center Connection Dropdown
-// ---------------------------------------------------------------------------
-
-function ConnectionDropdown() {
-  const allProfiles = useDBStore((s) => s.profiles.data) ?? [];
-  const activeConnections = useDBStore((s) => s.activeConnections);
+function ActiveProfileLabel() {
   const activeProfileId = useDBStore((s) => s.activeProfileId);
-  const setActiveProfile = useDBStore((s) => s.setActiveProfile);
-  const loadSchemaTree = useDBStore((s) => s.loadSchemaTree);
-
-  // Only show connected profiles in the dropdown
-  const connectedProfiles = allProfiles.filter((p) =>
-    activeConnections.has(p.id),
+  const activeProfile = useDBStore((s) =>
+    s.profiles.data?.find((p) => p.id === activeProfileId) ?? null,
   );
-  const current = connectedProfiles.find((p) => p.id === activeProfileId);
 
-  function handleSelect(profileId: string) {
-    if (profileId === activeProfileId) return;
-    setActiveProfile(profileId);
-    void loadSchemaTree(profileId);
-    // Session flush + load is handled by the activeProfileId change
-    // effect in MainWindow via switchSession()
-  }
+  if (!activeProfile) return null;
 
-  // No active connections yet
-  if (connectedProfiles.length === 0) {
-    return (
-      <div
-        className="flex items-center gap-1.5 h-7 px-2.5 text-[12px] text-muted-foreground/50 select-none"
-        style={{ "--wails-draggable": "no-drag" } as React.CSSProperties}
-      >
-        <HugeiconsIcon icon={WifiDisconnected01Icon} size={12} />
-        No active connection
-      </div>
-    );
-  }
-
-  const dotColor = current
-    ? profileDotColor(current.driver, current.tag?.color)
-    : "#6b7280";
+  const tagColor = activeProfile.tag?.color ?? "#6B7280";
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          style={{ "--wails-draggable": "no-drag" } as React.CSSProperties}
-          className={cn(
-            "flex items-center gap-1.5 h-7 px-2.5 rounded-md",
-            "text-[12px] font-medium text-foreground/80 hover:text-foreground",
-            "border border-transparent hover:border-border/40 hover:bg-white/10",
-            "transition-colors select-none",
-          )}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ backgroundColor: dotColor }}
-          />
-          <span>{current?.name ?? "Select connection"}</span>
-          {current?.database && (
-            <>
-              <span className="text-muted-foreground/50 mx-0.5">·</span>
-              <span className="text-muted-foreground">{current.database}</span>
-            </>
-          )}
-          <HugeiconsIcon
-            icon={ArrowDown01Icon}
-            size={12}
-            className="ml-0.5 text-muted-foreground"
-          />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="center" className="w-60">
-        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-          Active connection
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {connectedProfiles.map((profile) => {
-          const dot = profileDotColor(profile.driver, profile.tag?.color);
-          return (
-            <DropdownMenuItem
-              key={profile.id}
-              onClick={() => handleSelect(profile.id)}
-              className="gap-2 text-[12px] cursor-pointer"
-            >
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: dot }}
-              />
-              <div className="flex flex-col min-w-0">
-                <span className="font-medium truncate">{profile.name}</span>
-                <span className="text-muted-foreground text-[11px] truncate">
-                  {profile.host}:{profile.port}/{profile.database}
-                </span>
-              </div>
-              {activeProfileId === profile.id && (
-                <span className="ml-auto text-primary text-[11px] font-semibold shrink-0">
-                  ✓
-                </span>
-              )}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div
+      className="flex items-center gap-1.5 select-none"
+      style={{ "--wails-draggable": "no-drag" } as React.CSSProperties}
+    >
+      <span
+        className="inline-block h-2 w-2 shrink-0 rounded-sm"
+        style={{ backgroundColor: tagColor }}
+      />
+      <span className="text-[12px] font-medium text-foreground/70 truncate max-w-50">
+        {activeProfile.name}
+      </span>
+      {activeProfile.database && (
+        <>
+          <span className="text-muted-foreground/40">·</span>
+          <span className="text-[12px] text-muted-foreground/60 truncate max-w-30">
+            {activeProfile.database}
+          </span>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -390,7 +295,6 @@ export function TitleBar({
   rightSidebarOpen = false,
   onToggleRightSidebar,
   showRightToolbar = true,
-  showCenterDropdown = true,
 }: TitleBarProps) {
   const [platform, setPlatform] = useState<string>("windows");
   const [isMaximized, setIsMaximized] = useState(false);
@@ -437,7 +341,7 @@ export function TitleBar({
           "relative flex h-10 shrink-0 items-center justify-between",
           !isMac && "pl-3",
           "border-b border-border/60 bg-background/95 backdrop-blur-sm",
-          "select-none overflow-hidden z-[51]",
+          "select-none overflow-hidden z-51",
           className,
         )}
       >
@@ -473,12 +377,10 @@ export function TitleBar({
           </div>
         </div>
 
-        {/* ── Center: connection dropdown (absolutely centered) ── */}
-        {showCenterDropdown && (
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <ConnectionDropdown />
-          </div>
-        )}
+        {/* ── Center: active profile label (absolutely centered) ── */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <ActiveProfileLabel />
+        </div>
 
         {/* ── Right: toolbar + platform controls (win/linux) ── */}
         <div

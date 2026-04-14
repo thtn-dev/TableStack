@@ -253,7 +253,6 @@ export function StartupWindow() {
         onClose={() => void Window.Close()}
         showMaximize={false}
         showRightToolbar={false}
-        showCenterDropdown={false}
       />
 
       <div className="flex overflow-hidden">

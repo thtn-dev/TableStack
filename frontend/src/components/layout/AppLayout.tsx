@@ -17,6 +17,8 @@ import {
 // ---------------------------------------------------------------------------
 
 interface AppLayoutProps {
+  /** Narrow icon rail on the far left — pass <ProfileSidebar /> here */
+  profileSidebar?: ReactNode;
   /** Left sidebar — pass <SchemaTree /> here */
   sidebar: ReactNode;
   /** Main content area — TabBar + QueryEditor + ResultPanel */
@@ -48,6 +50,7 @@ function RightSidebarPlaceholder() {
 // ---------------------------------------------------------------------------
 
 export function AppLayout({
+  profileSidebar,
   sidebar,
   children,
   connectionStatus,
@@ -117,11 +120,14 @@ export function AppLayout({
         onToggleRightSidebar={toggleRightSidebar}
       />
 
-      {/* ── Row 2: Resizable panels ── */}
+      {/* ── Row 2: Profile rail + resizable panels ── */}
+      <div className="flex min-h-0 overflow-hidden">
+        {profileSidebar}
+
       <ResizablePanelGroup
         id="app-body"
         orientation="horizontal"
-        className="min-h-0"
+        className="min-h-0 flex-1"
       >
         {/* Left sidebar */}
         <ResizablePanel
@@ -182,6 +188,7 @@ export function AppLayout({
           <RightSidebarPlaceholder />
         </ResizablePanel>
       </ResizablePanelGroup>
+      </div>
 
       {/* ── Row 3: Status bar ── */}
       <StatusBar

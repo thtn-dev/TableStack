@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { SchemaTree } from "@/components/schema-tree";
+import { ProfileSidebar } from "@/components/profile-sidebar/ProfileSidebar";
 import { ConnectionDialog } from "@/components/connection";
 import { QueryEditor } from "@/components/query-editor";
 import { ResultPanel } from "@/components/result-panel";
@@ -443,6 +444,7 @@ export function MainWindow() {
   return (
     <>
       <AppLayout
+        profileSidebar={<ProfileSidebar />}
         sidebar={<SchemaTree />}
         connectionStatus={connectionStatus}
         activeDatabase={activeProfile?.database ?? null}
